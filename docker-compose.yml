@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. The Graph Database Service
+  neo4j_db:
+    image: neo4j:5.18-community
+    container_name: intelligence_neo4j
+    ports:
+      - "7474:7474" # Neo4j Browser Web Interface
+      - "7687:7687" # Bolt protocol port for backend code connection
+    environment:
+      - NEO4J_AUTH=neo4j/secure_password_123
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - intel_network
+
+  # 2. The Python AI Backend Service
+  backend:
+    build: .
+    container_name: intelligence_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000" # Expose FastAPI to your local machine
+    volumes:
+      - ./app:/code/app # Hot-reloads code changes instantly without rebuilding
+    environment:
+      - NEO4J_URI=bolt://neo4j_db:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=secure_password_123
+    depends_on:
+      - neo4j_db
+    networks:
+      - intel_network
+
+volumes:
+  neo4j_data:
+
+networks:
+  intel_network:
+    driver: bridge

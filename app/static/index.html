@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSINT Intelligence Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- vis.js Network Library for graph rendering -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation / Header -->
+        <header class="main-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-circle-nodes logo-icon"></i>
+                <div class="logo-text">
+                    <h1>OSINT</h1>
+                    <span>Intelligence Engine</span>
+                </div>
+            </div>
+            
+            <div class="workspace-panel">
+                <div class="selector-wrapper">
+                    <i class="fa-solid fa-briefcase"></i>
+                    <select id="workspaceSelect">
+                        <option value="Default">Default Workspace</option>
+                    </select>
+                </div>
+                
+                <form id="newWorkspaceForm" class="new-workspace-form">
+                    <input type="text" id="newWorkspaceInput" placeholder="New workspace name..." required autocomplete="off">
+                    <button type="submit" class="btn-secondary">
+                        <i class="fa-solid fa-plus"></i> Create
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <!-- Main Workspace Layout -->
+        <main class="dashboard-grid">
+            
+            <!-- Left Panel: Statistics, Scraper Control and Articles Log -->
+            <section class="control-panel">
+                
+                <!-- Stats Row -->
+                <div class="stats-grid">
+                    <div class="stat-card" data-entity="articles">
+                        <div class="stat-icon-wrapper">
+                            <i class="fa-solid fa-file-invoice"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="statArticles">0</h3>
+                            <span>Articles</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card" data-entity="people">
+                        <div class="stat-icon-wrapper">
+                            <i class="fa-solid fa-user-shield"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="statPeople">0</h3>
+                            <span>People</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card" data-entity="companies">
+                        <div class="stat-icon-wrapper">
+                            <i class="fa-solid fa-building"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="statCompanies">0</h3>
+                            <span>Companies</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OSINT Scraper Card -->
+                <div class="dashboard-card card-scraper">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-spider"></i> Web Scraper & Ingestor</h2>
+                        <span class="card-subtitle">Scrape any news URL to extract intelligence</span>
+                    </div>
+                    <div class="card-body">
+                        <form id="scrapeForm" class="scrape-form">
+                            <div class="input-wrapper">
+                                <i class="fa-solid fa-link"></i>
+                                <input type="url" id="scrapeUrlInput" placeholder="https://example.com/news-article-path" required autocomplete="off">
+                            </div>
+                            <button type="submit" class="btn-primary" id="scrapeSubmitBtn">
+                                <span>Ingest Article</span>
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </form>
+                        <div id="scraperStatus" class="status-indicator hidden">
+                            <div class="spinner"></div>
+                            <div class="status-text">Scraping web article content...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ingested Log Card -->
+                <div class="dashboard-card card-logs">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-history"></i> Ingested Articles</h2>
+                        <span class="card-subtitle">Recent documents processed in this workspace</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table class="recent-articles-table">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Processed</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentArticlesBody">
+                                    <tr>
+                                        <td colspan="2" class="empty-state">No articles in this workspace yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Network Graph Visualization -->
+            <section class="visualization-panel">
+                <div class="dashboard-card card-graph">
+                    <div class="card-header graph-header">
+                        <div>
+                            <h2><i class="fa-solid fa-diagram-project"></i> Entity Network Explorer</h2>
+                            <span class="card-subtitle">Physics-driven relationship graph</span>
+                        </div>
+                        <div class="graph-controls">
+                            <button id="togglePhysicsBtn" class="btn-toggle active" title="Toggle Graph Physics Simulation">
+                                <i class="fa-solid fa-wind"></i> Physics
+                            </button>
+                            <button id="resetGraphBtn" class="btn-secondary" title="Recenter Graph">
+                                <i class="fa-solid fa-arrows-to-eye"></i> Recenter
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body graph-body-wrapper">
+                        <!-- Legend -->
+                        <div class="graph-legend">
+                            <div class="legend-item"><span class="legend-dot legend-org"></span> Workspace</div>
+                            <div class="legend-item"><span class="legend-dot legend-art"></span> Article</div>
+                            <div class="legend-item"><span class="legend-dot legend-person"></span> Person</div>
+                            <div class="legend-item"><span class="legend-dot legend-company"></span> Company</div>
+                        </div>
+                        <!-- Graph Container -->
+                        <div id="networkGraphContainer" class="graph-canvas">
+                            <div class="graph-placeholder">
+                                <i class="fa-solid fa-circle-nodes"></i>
+                                <p>Select or create a workspace to view the graph visualization.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- App Logic -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
