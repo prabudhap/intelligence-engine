@@ -22,12 +22,15 @@ An automated, dockerized OSINT (Open Source Intelligence) pipeline that scrapes 
         *   `(:Person|Company|Location)-[:MENTIONED_IN]->(:Article)`
         *   `(:Person)-[:INDIRECTLY_INVOLVED_WITH]->(:Company)`
         *   `(:Person)-[:LOCATED_IN]->(:Location)`
-*   **Interactive Dashboard:** A premium, dark-mode dashboard featuring:
-    *   Dynamic Workspace switcher.
-    *   Key metrics counters (Articles, People, Companies).
-    *   Live log of recently processed articles.
-    *   **Vis.js Network Graph:** Physics-simulated graph visualization with custom colors for node groups (with Location nodes colored purple).
-    *   **Relationship Pathfinder:** An interactive tool to query, trace, and isolate the shortest connection path (up to 6 hops) between any two entities in the graph.
+*   **Interactive Dashboard & Pathfinder Analysis:** A premium, dark-mode dashboard featuring:
+    *   **Dynamic Workspace switcher:** Live workspace node, article count, and entity counts updates.
+    *   **Key metrics counters:** Real-time metrics for Articles, People, and Companies.
+    *   **Independent Scrollable Panels:** The left control panel scroll independently matching the viewport height, keeping all dashboard cards compact and accessible.
+    *   **Physics-Controlled Vis.js Network Graph:** Physics-driven node graph with customizable layouts. Automatically disables physics stabilization for small path graphs ($\le 10$ nodes) to prevent drift and lag.
+    *   **High-Speed Neo4j Queries:** Optimized graph queries by splitting the Cartesian product query into separate focused queries, **speeding up load times from 1.5 minutes to under 415 milliseconds**.
+    *   **Transparent Canvas Labels:** Clean edge text styling with transparent background fills and stroke outlines removed, making labels float natively on the dark canvas.
+    *   **Connection Trail Narrative (Left Panel):** Traces shortest paths (up to 6 hops) and renders full-detail matching paragraphs in a scrollable blockquote list.
+    *   **Floating Connection Info Box (Canvas Overlay):** A versatile-sized hover and click overlay box floating inside the graph canvas, displaying concise sentence-level relationship context. Disables default browser tooltips for a clean, unified aesthetic.
 
 ---
 
