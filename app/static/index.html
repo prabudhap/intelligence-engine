@@ -135,8 +135,15 @@
                                 <button type="button" class="btn-secondary" id="clearPathBtn" style="padding: 0.75rem 1rem;" title="Clear Path Selection">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
-                            </div>
                         </form>
+                        <div id="pathfinderExplanation" class="pathfinder-explanation hidden">
+                            <div class="explanation-title">
+                                <i class="fa-solid fa-circle-info"></i> Connection Trail
+                            </div>
+                            <div class="explanation-steps" id="pathfinderExplanationSteps">
+                                <!-- Filled dynamically -->
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -223,6 +230,17 @@
                             <div class="graph-placeholder">
                                 <i class="fa-solid fa-circle-nodes"></i>
                                 <p>Select or create a workspace to view the graph visualization.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Floating Graph Info Box -->
+                        <div id="graphInfoBox" class="graph-info-box">
+                            <div class="info-box-header">
+                                <span><i class="fa-solid fa-link-slash"></i> Connection Info</span>
+                                <button id="closeInfoBoxBtn" class="info-box-close">&times;</button>
+                            </div>
+                            <div id="graphInfoBoxBody" class="info-box-body">
+                                <p class="info-box-hint">Hover or click a path relationship line to view the summary.</p>
                             </div>
                         </div>
                     </div>

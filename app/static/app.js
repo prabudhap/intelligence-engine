@@ -111,6 +111,14 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
+    // Close button for floating graph info box
+    const closeInfoBoxBtn = document.getElementById("closeInfoBoxBtn");
+    if (closeInfoBoxBtn) {
+        closeInfoBoxBtn.addEventListener("click", () => {
+            hideGraphInfoBox();
+        });
+    }
 });
 
 // Load Workspaces list from API
@@ -262,7 +270,7 @@ async function fetchGraphData() {
 // Render dynamic graph using Vis.js Network
 function renderNetwork(nodesArray, edgesArray) {
     // Styling attributes based on groups
-    const styledNodes = nodesArray.map(node => {
+    const styledNodes = nodesArray.map((node, index) => {
         let size = 12;
         let font = { color: "#ffffff", size: 12, face: "Outfit" };
         
@@ -274,16 +282,44 @@ function renderNetwork(nodesArray, edgesArray) {
             font = { color: "#e1e7ec", size: 12, face: "Outfit" };
         }
 
+        const extra = {};
+        if (nodesArray.length <= 10) {
+            // Distribute small nodes in a stable, spaced-out circular pattern centered at (0, 0)
+            const angle = (2 * Math.PI * index) / nodesArray.length;
+            extra.x = 180 * Math.cos(angle);
+            extra.y = 180 * Math.sin(angle);
+        }
+
         return {
             ...node,
             size: size,
-            font: font
+            font: font,
+            ...extra
+        };
+    });
+
+    // Map edges to be user-friendly and add hover tooltips
+    const styledEdges = edgesArray.map(edge => {
+        let friendlyLabel = edge.label;
+        if (friendlyLabel === "INDIRECTLY_INVOLVED_WITH") {
+            friendlyLabel = "Indirect Association";
+        } else if (friendlyLabel === "MENTIONED_IN") {
+            friendlyLabel = "Mentioned In";
+        } else if (friendlyLabel === "LOCATED_IN") {
+            friendlyLabel = "Located In";
+        } else if (friendlyLabel === "UNDER_WORKSPACE") {
+            friendlyLabel = "Workspace Link";
+        }
+
+        return {
+            ...edge,
+            label: friendlyLabel
         };
     });
 
     // Use DataSet to allow dynamic style updates (highlights/dimming)
     const nodesDataSet = new vis.DataSet(styledNodes);
-    const edgesDataSet = new vis.DataSet(edgesArray);
+    const edgesDataSet = new vis.DataSet(styledEdges);
 
     const data = {
         nodes: nodesDataSet,
@@ -313,10 +349,11 @@ function renderNetwork(nodesArray, edgesArray) {
                 to: { enabled: true, scaleFactor: 0.8 }
             },
             font: {
-                color: "#9ca3af",
+                color: "#e1e7ec",
                 size: 9,
                 face: "Outfit",
-                background: "#0b0c13"
+                background: "transparent",
+                strokeWidth: 0
             },
             smooth: {
                 type: "dynamic"
@@ -360,7 +397,7 @@ function renderNetwork(nodesArray, edgesArray) {
             }
         },
         physics: {
-            enabled: true, // Always start with physics enabled for initial layout arrangement
+            enabled: nodesArray.length > 10,
             solver: "barnesHut",
             barnesHut: {
                 gravitationalConstant: -1800,
@@ -371,10 +408,10 @@ function renderNetwork(nodesArray, edgesArray) {
                 avoidOverlap: 1
             },
             stabilization: {
-                enabled: true,
+                enabled: nodesArray.length > 10,
                 iterations: 150,
                 updateInterval: 25,
-                fit: true
+                fit: nodesArray.length > 10
             }
         },
         interaction: {
@@ -383,19 +420,83 @@ function renderNetwork(nodesArray, edgesArray) {
         }
     };
 
+    console.log("renderNetwork called with nodes:", nodesArray, "edges:", edgesArray);
+    
     // Recreate canvas element to clean legacy structures
     networkGraphContainer.innerHTML = "";
     
-    networkInstance = new vis.Network(networkGraphContainer, data, options);
+    try {
+        networkInstance = new vis.Network(networkGraphContainer, data, options);
+        console.log("vis.Network instance successfully created.");
 
-    // Freeze physics once stabilization completes to prevent continuous lag
-    networkInstance.on("stabilizationFinished", function () {
-        networkInstance.setOptions({ physics: { enabled: false } });
+        // Setup Hover and Select Edge Events for Graph Information Box
+        networkInstance.on("hoverEdge", (params) => {
+            const edgeId = params.edge;
+            const edgeData = edgesDataSet.get(edgeId);
+            if (edgeData && edgeData.context) {
+                showGraphInfoBox(edgeData);
+            }
+        });
+
+        networkInstance.on("blurEdge", () => {
+            hideGraphInfoBox();
+        });
+
+        networkInstance.on("selectEdge", (params) => {
+            const edgeId = params.edges[0];
+            if (edgeId) {
+                const edgeData = edgesDataSet.get(edgeId);
+                if (edgeData && edgeData.context) {
+                    showGraphInfoBox(edgeData);
+                }
+            }
+        });
+    } catch (err) {
+        console.error("Error creating vis.Network instance:", err);
+        networkGraphContainer.innerHTML = `
+            <div class="graph-placeholder" style="color: var(--error);">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <p>Error rendering network graph: ${err.message}</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (nodesArray.length > 10) {
+        // Freeze physics once stabilization completes to prevent continuous lag (only for larger networks)
+        networkInstance.on("stabilizationFinished", function () {
+            console.log("Graph stabilization finished. Node count:", nodesArray.length);
+            networkInstance.setOptions({ physics: { enabled: false } });
+            physicsEnabled = false;
+            if (togglePhysicsBtn) {
+                togglePhysicsBtn.classList.remove("active");
+            }
+            console.log("Physics disabled to prevent performance lag on large graph.");
+        });
+    } else {
         physicsEnabled = false;
         if (togglePhysicsBtn) {
             togglePhysicsBtn.classList.remove("active");
         }
-    });
+        console.log("Physics disabled by default for small static graph.");
+    }
+
+    // Center camera at (0,0) at scale 1.0 for small node counts to guarantee they are visible and centered
+    if (nodesArray.length > 0 && nodesArray.length <= 10) {
+        setTimeout(() => {
+            if (networkInstance) {
+                console.log("Applying manual moveTo fallback for small graph...");
+                networkInstance.moveTo({
+                    position: { x: 0, y: 0 },
+                    scale: 1.0,
+                    animation: {
+                        duration: 500,
+                        easingFunction: "easeInOutQuad"
+                    }
+                });
+            }
+        }, 200);
+    }
 
     // Track state to reset highlights
     let isNodeSelected = false;
@@ -603,6 +704,9 @@ async function handlePathfinderSubmit(e) {
         // Also update the connections list table below to display only the path connections
         renderConnectionsTable(pathData.nodes, pathData.edges);
 
+        // Generate and display the human-readable narrative trail explanation
+        showPathNarrative(pathData.nodes, pathData.edges, source, target);
+
     } catch (error) {
         console.error("Pathfinding failed:", error);
         alert(`Pathfinding error: ${error.message}`);
@@ -615,7 +719,137 @@ async function handlePathfinderSubmit(e) {
 function handleClearPath() {
     if (pathSourceSelect) pathSourceSelect.value = "";
     if (pathTargetSelect) pathTargetSelect.value = "";
+    const explanationDiv = document.getElementById("pathfinderExplanation");
+    if (explanationDiv) explanationDiv.classList.add("hidden");
     updateDashboardData();
+}
+
+// Reconstruct path sequence and build human-readable narrative trail
+function showPathNarrative(nodes, edges, sourceName, targetName) {
+    const explanationDiv = document.getElementById("pathfinderExplanation");
+    const stepsContainer = document.getElementById("pathfinderExplanationSteps");
+    if (!explanationDiv || !stepsContainer) return;
+
+    stepsContainer.innerHTML = "";
+    const steps = reconstructPathSteps(nodes, edges, sourceName, targetName);
+
+    if (steps.length === 0) {
+        explanationDiv.classList.add("hidden");
+        return;
+    }
+
+    steps.forEach(step => {
+        const stepEl = document.createElement("div");
+        stepEl.className = "explanation-step-container";
+
+        const textEl = document.createElement("div");
+        textEl.className = "explanation-step";
+        textEl.innerHTML = getFriendlyRelationText(step);
+        stepEl.appendChild(textEl);
+
+        if (step.full_context) {
+            const contextEl = document.createElement("div");
+            contextEl.className = "explanation-context";
+            contextEl.innerHTML = `<i class="fa-solid fa-quote-left"></i> "${step.full_context}"`;
+            stepEl.appendChild(contextEl);
+        }
+
+        stepsContainer.appendChild(stepEl);
+    });
+
+    explanationDiv.classList.remove("hidden");
+}
+
+function reconstructPathSteps(nodesArray, edgesArray, sourceName, targetName) {
+    const nodeMap = new Map();
+    nodesArray.forEach(n => {
+        nodeMap.set(n.id, n);
+    });
+
+    let sourceNode = nodesArray.find(n => n.label === sourceName);
+    let targetNode = nodesArray.find(n => n.label === targetName);
+
+    if (!sourceNode || !targetNode) {
+        sourceNode = nodesArray.find(n => n.label.toLowerCase() === sourceName.toLowerCase());
+        targetNode = nodesArray.find(n => n.label.toLowerCase() === targetName.toLowerCase());
+    }
+
+    if (!sourceNode || !targetNode) return [];
+
+    const steps = [];
+    let currentNode = sourceNode;
+    const visitedNodeIds = new Set([currentNode.id]);
+
+    while (currentNode.id !== targetNode.id) {
+        let nextEdge = null;
+        let nextNode = null;
+        let direction = "";
+
+        for (const edge of edgesArray) {
+            if (edge.from === currentNode.id && nodeMap.has(edge.to) && !visitedNodeIds.has(edge.to)) {
+                nextEdge = edge;
+                nextNode = nodeMap.get(edge.to);
+                direction = "forward";
+                break;
+            } else if (edge.to === currentNode.id && nodeMap.has(edge.from) && !visitedNodeIds.has(edge.from)) {
+                nextEdge = edge;
+                nextNode = nodeMap.get(edge.from);
+                direction = "backward";
+                break;
+            }
+        }
+
+        if (!nextEdge || !nextNode) {
+            break;
+        }
+
+        steps.push({
+            from: currentNode,
+            to: nextNode,
+            relation: nextEdge.label,
+            direction: direction,
+            context: nextEdge.context || "",
+            full_context: nextEdge.full_context || ""
+        });
+
+        visitedNodeIds.add(nextNode.id);
+        currentNode = nextNode;
+    }
+
+    return steps;
+}
+
+function getFriendlyRelationText(step) {
+    const fromLabel = `<span class="badge badge-${step.from.group.toLowerCase()}">${step.from.label}</span>`;
+    const toLabel = `<span class="badge badge-${step.to.group.toLowerCase()}">${step.to.label}</span>`;
+    
+    const rel = step.relation;
+    const isForward = step.direction === "forward";
+
+    if (rel === "MENTIONED_IN") {
+        return isForward 
+            ? `${fromLabel} is mentioned in the article ${toLabel}`
+            : `the article ${fromLabel} mentions ${toLabel}`;
+    }
+    if (rel === "INDIRECTLY_INVOLVED_WITH") {
+        return isForward
+            ? `${fromLabel} is indirectly involved with ${toLabel}`
+            : `${fromLabel} is indirectly associated with ${toLabel}`;
+    }
+    if (rel === "LOCATED_IN") {
+        return isForward
+            ? `${fromLabel} is located in ${toLabel}`
+            : `${fromLabel} houses ${toLabel}`;
+    }
+    if (rel === "UNDER_WORKSPACE") {
+        return isForward
+            ? `the article ${fromLabel} is filed under workspace ${toLabel}`
+            : `the workspace ${fromLabel} contains article ${toLabel}`;
+    }
+
+    return isForward
+        ? `${fromLabel} is linked to ${toLabel} via <span class="relation-code">${rel}</span>`
+        : `${fromLabel} is linked from ${toLabel} via <span class="relation-code">${rel}</span>`;
 }
 
 // Render dynamic relationships table
@@ -828,3 +1062,56 @@ function populatePathfinderSelects(nodes) {
     const targetExists = nodes.some(n => n.label === prevTarget);
     if (targetExists) pathTargetSelect.value = prevTarget;
 }
+
+// Show details inside the floating graph overlay box on hover/select
+function showGraphInfoBox(edgeData) {
+    const infoBox = document.getElementById("graphInfoBox");
+    const infoBoxBody = document.getElementById("graphInfoBoxBody");
+    if (!infoBox || !infoBoxBody) return;
+
+    const fromNode = currentNodes.find(n => n.id === edgeData.from);
+    const toNode = currentNodes.find(n => n.id === edgeData.to);
+    if (!fromNode || !toNode) return;
+
+    // Map edge label to friendly name
+    let friendlyLabel = edgeData.label;
+    if (friendlyLabel === "INDIRECTLY_INVOLVED_WITH") {
+        friendlyLabel = "Indirect Association";
+    } else if (friendlyLabel === "MENTIONED_IN") {
+        friendlyLabel = "Mentioned In";
+    } else if (friendlyLabel === "LOCATED_IN") {
+        friendlyLabel = "Located In";
+    } else if (friendlyLabel === "UNDER_WORKSPACE") {
+        friendlyLabel = "Workspace Link";
+    }
+
+    const step = {
+        from: fromNode,
+        to: toNode,
+        relation: friendlyLabel,
+        direction: "forward"
+    };
+
+    const friendlyHtml = getFriendlyRelationText(step);
+
+    let htmlContent = `
+        <div class="info-box-step">${friendlyHtml}</div>
+    `;
+
+    if (edgeData.context) {
+        htmlContent += `
+            <div class="info-box-quote"><i class="fa-solid fa-quote-left"></i> "${edgeData.context}"</div>
+        `;
+    }
+
+    infoBoxBody.innerHTML = htmlContent;
+    infoBox.classList.add("visible");
+}
+
+function hideGraphInfoBox() {
+    const infoBox = document.getElementById("graphInfoBox");
+    if (infoBox) {
+        infoBox.classList.remove("visible");
+    }
+}
+

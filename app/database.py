@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from typing import cast, LiteralString
 from neo4j import GraphDatabase
@@ -38,21 +39,22 @@ class Database:
                     except Exception as e2:
                         logger.error(f"Fallback constraint creation failed: {e2}")
 
-    def save_intelligence(self, org_name: str, title: str, entities: dict):
+    def save_intelligence(self, org_name: str, title: str, entities: dict, body: str = ""):
         with self.driver.session() as session:
-            session.execute_write(self._cypher_transaction, org_name, title, entities)
+            session.execute_write(self._cypher_transaction, org_name, title, entities, body)
 
     @staticmethod
-    def _cypher_transaction(tx, org_name, title, entities):
+    def _cypher_transaction(tx, org_name, title, entities, body):
         # 1. Merge the Organization workspace node
         tx.run("MERGE (o:Organization {name: $org_name})", org_name=org_name)
 
-        # 2. Merge the Article node with a timestamp
+        # 2. Merge the Article node with a timestamp and body
         current_time = int(time.time() * 1000)
         tx.run("""
             MERGE (a:Article {title: $title})
-            ON CREATE SET a.created_at = $created_at
-        """, title=title, created_at=current_time)
+            ON CREATE SET a.created_at = $created_at, a.body = $body
+            ON MATCH SET a.body = $body
+        """, title=title, created_at=current_time, body=body)
         
         # 3. Link the Article to the Organization
         tx.run("""
@@ -187,44 +189,67 @@ class Database:
                 seen_edges.add(edge_key)
 
         with self.driver.session() as session:
-            result = session.run("""
+            # 1. Fetch organization and articles
+            res_articles = session.run("""
                 MATCH (o:Organization {name: $org_name})
                 OPTIONAL MATCH (a:Article)-[r_uw:UNDER_WORKSPACE]->(o)
-                OPTIONAL MATCH (ent)-[r_m:MENTIONED_IN]->(a)
-                OPTIONAL MATCH (p:Person)-[r_iiw:INDIRECTLY_INVOLVED_WITH]->(c:Company)
-                WHERE (p)-[:MENTIONED_IN]->(a) AND (c)-[:MENTIONED_IN]->(a)
-                OPTIONAL MATCH (p)-[r_li:LOCATED_IN]->(l:Location)
-                WHERE (p)-[:MENTIONED_IN]->(a) AND (l)-[:MENTIONED_IN]->(a)
-                RETURN o, a, ent, p, c, l, r_uw, r_m, r_iiw, r_li
+                RETURN o, a, r_uw
             """, org_name=org_name)
-
-            for record in result:
+            
+            for record in res_articles:
                 o = record.get("o")
                 a = record.get("a")
-                ent = record.get("ent")
-                p = record.get("p")
-                c = record.get("c")
-                l = record.get("l")
-
-                # Add nodes
                 add_node(o, "Organization")
-                add_node(a, "Article")
+                if a:
+                    add_node(a, "Article")
+                    add_edge(a, o, "UNDER_WORKSPACE")
+
+            # 2. Fetch all entities mentioned in articles under this workspace
+            res_entities = session.run("""
+                MATCH (o:Organization {name: $org_name})
+                MATCH (a:Article)-[:UNDER_WORKSPACE]->(o)
+                MATCH (ent)-[r_m:MENTIONED_IN]->(a)
+                RETURN ent, a, r_m
+            """, org_name=org_name)
+            
+            for record in res_entities:
+                ent = record.get("ent")
+                a = record.get("a")
                 if ent:
                     label = list(ent.labels)[0] if ent.labels else "Unknown"
                     add_node(ent, label)
+                    add_edge(ent, a, "MENTIONED_IN")
+
+            # 3. Fetch relationships between these entities
+            res_rels = session.run("""
+                MATCH (o:Organization {name: $org_name})
+                MATCH (a:Article)-[:UNDER_WORKSPACE]->(o)
+                MATCH (p:Person)-[:MENTIONED_IN]->(a)
+                MATCH (c:Company)-[:MENTIONED_IN]->(a)
+                MATCH (p)-[r:INDIRECTLY_INVOLVED_WITH]->(c)
+                RETURN p, c, r
+            """, org_name=org_name)
+            for record in res_rels:
+                p = record.get("p")
+                c = record.get("c")
                 add_node(p, "Person")
                 add_node(c, "Company")
-                add_node(l, "Location")
+                add_edge(p, c, "INDIRECTLY_INVOLVED_WITH")
 
-                # Add relationships
-                if a and o:
-                    add_edge(a, o, "UNDER_WORKSPACE")
-                if ent and a:
-                    add_edge(ent, a, "MENTIONED_IN")
-                if p and c:
-                    add_edge(p, c, "INDIRECTLY_INVOLVED_WITH")
-                if p and l:
-                    add_edge(p, l, "LOCATED_IN")
+            res_rels_loc = session.run("""
+                MATCH (o:Organization {name: $org_name})
+                MATCH (a:Article)-[:UNDER_WORKSPACE]->(o)
+                MATCH (p:Person)-[:MENTIONED_IN]->(a)
+                MATCH (l:Location)-[:MENTIONED_IN]->(a)
+                MATCH (p)-[r:LOCATED_IN]->(l)
+                RETURN p, l, r
+            """, org_name=org_name)
+            for record in res_rels_loc:
+                p = record.get("p")
+                l = record.get("l")
+                add_node(p, "Person")
+                add_node(l, "Location")
+                add_edge(p, l, "LOCATED_IN")
 
         return {"nodes": nodes, "edges": edges}
 
@@ -261,11 +286,87 @@ class Database:
             for rel in path.relationships:
                 edge_key = (rel.start_node.element_id, rel.end_node.element_id, rel.type)
                 if edge_key not in seen_edges:
+                    context_data = self.get_relationship_context(
+                        session, rel.type, rel.start_node.element_id, rel.end_node.element_id
+                    )
                     edges.append({
                         "from": rel.start_node.element_id,
                         "to": rel.end_node.element_id,
-                        "label": rel.type
+                        "label": rel.type,
+                        "context": context_data.get("context", ""),
+                        "full_context": context_data.get("full_context", "")
                     })
                     seen_edges.add(edge_key)
                 
             return {"nodes": nodes, "edges": edges}
+
+    def get_relationship_context(self, session, rel_type: str, start_id: str, end_id: str) -> dict:
+        query = """
+            MATCH (n1) WHERE elementId(n1) = $start_id
+            MATCH (n2) WHERE elementId(n2) = $end_id
+            WITH n1, n2
+            OPTIONAL MATCH (a:Article) 
+            WHERE a.body IS NOT NULL AND (
+                (elementId(a) = $start_id) OR (elementId(a) = $end_id) OR
+                ((n1)-[:MENTIONED_IN]->(a) AND (n2)-[:MENTIONED_IN]->(a))
+            )
+            RETURN n1.name as name1, n1.title as title1, 
+                   n2.name as name2, n2.title as title2, 
+                   a.body as body
+            LIMIT 1
+        """
+        result = session.run(query, start_id=start_id, end_id=end_id)
+        record = result.single()
+        if not record or not record.get("body"):
+            return {"context": "", "full_context": ""}
+            
+        name1 = record.get("name1") or record.get("title1") or ""
+        name2 = record.get("name2") or record.get("title2") or ""
+        body = record.get("body")
+        
+        # Split body into paragraphs
+        paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+        
+        # 1. Search for paragraph containing both names
+        matched_paragraph = ""
+        for p in paragraphs:
+            if name1.lower() in p.lower() and name2.lower() in p.lower():
+                matched_paragraph = p
+                break
+                
+        # 2. Fallback: Search for paragraph containing at least one of them
+        if not matched_paragraph:
+            for p in paragraphs:
+                if name1.lower() in p.lower() or name2.lower() in p.lower():
+                    matched_paragraph = p
+                    break
+                    
+        if not matched_paragraph:
+            return {"context": "", "full_context": ""}
+            
+        # Split paragraph into sentences using regular expression terminal punctuation matching
+        sentences = re.split(r'(?<=[.!?])\s+', matched_paragraph)
+        relevant_sentences = []
+        
+        # Keep sentences containing both names
+        for s in sentences:
+            if name1.lower() in s.lower() and name2.lower() in s.lower():
+                relevant_sentences.append(s)
+                
+        # If none, keep sentences containing at least one of the names
+        if not relevant_sentences:
+            for s in sentences:
+                if name1.lower() in s.lower() or name2.lower() in s.lower():
+                    relevant_sentences.append(s)
+                    
+        # Fallback to the first sentence if none match specifically
+        if not relevant_sentences and sentences:
+            relevant_sentences.append(sentences[0])
+            
+        summary = " ".join(relevant_sentences).strip()
+        
+        # Cap length at 280 characters to keep it compact and readable in tooltips
+        if len(summary) > 280:
+            summary = summary[:277] + "..."
+            
+        return {"context": summary, "full_context": matched_paragraph}

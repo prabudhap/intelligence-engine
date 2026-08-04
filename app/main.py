@@ -44,7 +44,7 @@ class ScrapeInput(BaseModel):
 def pipeline_worker(org: str, title: str, body: str):
     try:
         entities = extract_entities(body)
-        db.save_intelligence(org, title, entities)
+        db.save_intelligence(org, title, entities, body)
         logger.info(f"🎉 Successfully mapped node networks for: {title} inside workspace: {org}")
     except Exception as e:
         logger.error(f"❌ Failed to process article '{title}' in workspace '{org}': {e}", exc_info=True)
