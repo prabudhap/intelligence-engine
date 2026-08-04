@@ -107,6 +107,39 @@
                     </div>
                 </div>
 
+                <!-- Pathfinder Card -->
+                <div class="dashboard-card card-pathfinder">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-route"></i> Relationship Pathfinder</h2>
+                        <span class="card-subtitle">Find the shortest connection path between two entities</span>
+                    </div>
+                    <div class="card-body">
+                        <form id="pathfinderForm" class="scrape-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <div class="input-wrapper">
+                                <i class="fa-solid fa-circle-dot" style="color: var(--color-person); z-index: 2;"></i>
+                                <select id="pathSourceSelect" class="pathfinder-select" required>
+                                    <option value="" disabled selected>Select source...</option>
+                                </select>
+                            </div>
+                            <div class="input-wrapper">
+                                <i class="fa-solid fa-location-crosshairs" style="color: var(--color-company); z-index: 2;"></i>
+                                <select id="pathTargetSelect" class="pathfinder-select" required>
+                                    <option value="" disabled selected>Select target...</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button type="submit" class="btn-primary" id="findPathBtn" style="flex: 1;">
+                                    <span>Find Path</span>
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </button>
+                                <button type="button" class="btn-secondary" id="clearPathBtn" style="padding: 0.75rem 1rem;" title="Clear Path Selection">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
                 <!-- Ingested Log Card -->
                 <div class="dashboard-card card-logs">
                     <div class="card-header">
@@ -125,6 +158,32 @@
                                 <tbody id="recentArticlesBody">
                                     <tr>
                                         <td colspan="2" class="empty-state">No articles in this workspace yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extracted Connections Card -->
+                <div class="dashboard-card card-connections">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-link"></i> Extracted Connections</h2>
+                        <span class="card-subtitle">Entities and relationship mappings in this workspace</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table class="recent-articles-table">
+                                <thead>
+                                    <tr>
+                                        <th>Source</th>
+                                        <th>Relation</th>
+                                        <th>Target</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="connectionsTableBody">
+                                    <tr>
+                                        <td colspan="3" class="empty-state">No connections in this workspace yet.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -153,10 +212,11 @@
                     <div class="card-body graph-body-wrapper">
                         <!-- Legend -->
                         <div class="graph-legend">
-                            <div class="legend-item"><span class="legend-dot legend-org"></span> Workspace</div>
-                            <div class="legend-item"><span class="legend-dot legend-art"></span> Article</div>
-                            <div class="legend-item"><span class="legend-dot legend-person"></span> Person</div>
-                            <div class="legend-item"><span class="legend-dot legend-company"></span> Company</div>
+                            <div class="legend-item" data-entity="organizations"><span class="legend-dot legend-org"></span> Workspace</div>
+                            <div class="legend-item" data-entity="articles"><span class="legend-dot legend-art"></span> Article</div>
+                            <div class="legend-item" data-entity="people"><span class="legend-dot legend-person"></span> Person</div>
+                            <div class="legend-item" data-entity="companies"><span class="legend-dot legend-company"></span> Company</div>
+                            <div class="legend-item" data-entity="locations"><span class="legend-dot legend-location"></span> Location</div>
                         </div>
                         <!-- Graph Container -->
                         <div id="networkGraphContainer" class="graph-canvas">
@@ -170,6 +230,28 @@
             </section>
 
         </main>
+    </div>
+
+    <!-- Entity Details Modal -->
+    <div id="detailsModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Entity Details</h2>
+                <button id="closeModalBtn" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                    <table class="recent-articles-table">
+                        <thead id="modalTableHead">
+                            <!-- Populated dynamically -->
+                        </thead>
+                        <tbody id="modalTableBody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- App Logic -->

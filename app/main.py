@@ -18,6 +18,11 @@ db = Database()
 async def lifespan(app: FastAPI):
     # Startup phase
     logger.info("Starting up OSINT Intelligence Engine API...")
+    try:
+        db.setup_constraints()
+        logger.info("Successfully initialized Neo4j unique constraints & indexes.")
+    except Exception as e:
+        logger.error(f"Failed to initialize database constraints: {e}")
     yield
     # Shutdown phase
     logger.info("Shutting down OSINT Intelligence Engine API...")
@@ -74,6 +79,17 @@ def get_graph(org: str = Query(..., description="Organization workspace name")):
     try:
         graph_data = db.get_graph_data(org)
         return graph_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/path")
+def get_shortest_path(
+    source: str = Query(..., description="Source node name or title"),
+    target: str = Query(..., description="Target node name or title")
+):
+    try:
+        path_data = db.get_shortest_path(source, target)
+        return path_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

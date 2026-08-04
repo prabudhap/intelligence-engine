@@ -1,22 +1,33 @@
 # OSINT Intelligence Engine 🕸️🤖
 
-An automated, dockerized OSINT (Open Source Intelligence) pipeline that scrapes web articles, extracts entities (People & Organizations) using Natural Language Processing (NLP), and maps their relationship networks in a dynamic Neo4j Graph Database.
+An automated, dockerized OSINT (Open Source Intelligence) pipeline that scrapes web articles, extracts entities (People, Companies, & Locations) using Natural Language Processing (NLP), and maps their relationship networks in a dynamic Neo4j Graph Database.
 
 ---
 
 ## 🌟 Features
 
-*   **Automated Web Scraper:** Custom BeautifulSoup ingestion pipeline that extracts article titles and bodies, sanitizing navigation elements, scripts, ads, and boilerplate text.
-*   **NLP Entity Extraction:** Employs a pre-trained **spaCy** model (`en_core_web_sm`) to classify named entities (specifically `PERSON` and `ORG` tags).
-*   **Graph Network Storage:** Resolves entities to a schema of `Organization`, `Article`, `Person`, and `Company` nodes in **Neo4j** with semantic relationships:
-    *   `(:Article)-[:UNDER_WORKSPACE]->(:Organization)`
-    *   `(:Person|Company)-[:MENTIONED_IN]->(:Article)`
-    *   `(:Person)-[:INDIRECTLY_INVOLVED_WITH]->(:Company)`
+*   **Robust Web Scraper:** 
+    *   **Anti-Blocking measures:** Employs User-Agent rotation from a standard browser agent pool and custom HTTP headers.
+    *   **Layout Sanitization:** Automatically decomposes scripts, styles, navs, footers, headers, asides, forms, iframes, and noscript wrappers.
+    *   **Main Content Targeting:** Searches for common container tags (like `<article>`, `<main>`, `.post-content`, etc.) to locate relevant article body text.
+    *   **Fallback Ingestion:** Automatically utilizes meta description attributes (`description` or `og:description`) and raw page body extraction as backup mechanisms.
+*   **NLP Entity Extraction & Resolution:** 
+    *   **Entity Ingestion:** Uses a pre-trained **spaCy** model (`en_core_web_sm`) to classify named entities: `PERSON`, `ORG` (mapped to `Company`), and `GPE` (mapped to `Location`).
+    *   **Entity Normalization:** Automatically standardizes corporate names by removing trailing suffixes (e.g. *Inc., LLC, Ltd., Corp.*) and sanitizes formatting.
+    *   **Paragraph Proximity Mapping:** Dynamically groups and maps relationships for entities mentioned inside the same paragraph (demarcated by double newlines `\n\n`) to significantly minimize unrelated "global" network noise.
+*   **Graph Network Storage:** Resolves entities to a schema of `Organization` (Workspace), `Article`, `Person`, `Company`, and `Location` nodes in **Neo4j**:
+    *   **Schema Enforcement:** Automatically creates and validates unique constraints for all node types (`Organization.name`, `Article.title`, `Person.name`, `Company.name`, and `Location.name`) on server startup.
+    *   **Semantic Relationships:**
+        *   `(:Article)-[:UNDER_WORKSPACE]->(:Organization)`
+        *   `(:Person|Company|Location)-[:MENTIONED_IN]->(:Article)`
+        *   `(:Person)-[:INDIRECTLY_INVOLVED_WITH]->(:Company)`
+        *   `(:Person)-[:LOCATED_IN]->(:Location)`
 *   **Interactive Dashboard:** A premium, dark-mode dashboard featuring:
     *   Dynamic Workspace switcher.
-    *   Key metrics counts (Articles, People, Companies).
+    *   Key metrics counters (Articles, People, Companies).
     *   Live log of recently processed articles.
-    *   **Vis.js Network** visualization of the intelligence graph with physics simulation controls.
+    *   **Vis.js Network Graph:** Physics-simulated graph visualization with custom colors for node groups (with Location nodes colored purple).
+    *   **Relationship Pathfinder:** An interactive tool to query, trace, and isolate the shortest connection path (up to 6 hops) between any two entities in the graph.
 
 ---
 
@@ -116,8 +127,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 *   `GET /api/stats?org={org_name}` - Fetches node counters (Articles, People, Companies) under a workspace.
 *   `GET /api/recent?org={org_name}` - Retrieves the 20 most recently ingested articles.
 
-### 🕸️ Relationship Graph
+### 🕸️ Relationship Graph & Pathfinder
 *   `GET /api/graph?org={org_name}` - Generates the node-edge payload structured for vis.js rendering.
+*   `GET /api/path?source={source_name}&target={target_name}` - Computes and returns the shortest path (up to 6 hops) connecting the two entities.
 
 ### 📩 Data Ingestion
 *   `POST /api/scrape`
@@ -136,15 +148,15 @@ intelligence-engine/
 │
 ├── app/
 │   ├── static/                 # Front-end Assets
-│   │   ├── app.js              # State management & Vis.js rendering
-│   │   ├── index.html          # Dashboard Layout
-│   │   └── style.css           # Premium Dark Mode Theme
+│   │   ├── app.js              # State management, Vis.js rendering, & Pathfinder highlights
+│   │   ├── index.html          # Dashboard Layout with Pathfinder card
+│   │   └── style.css           # Premium Dark Mode Theme with Location color schemes
 │   │
 │   ├── __init__.py
-│   ├── database.py             # Neo4j Cypher Transaction Handlers
-│   ├── main.py                 # FastAPI Application Config & Endpoints
-│   ├── nlp.py                  # spaCy Entity Extraction Logic
-│   └── scraper.py              # BeautifulSoup Article Scraper
+│   ├── database.py             # Neo4j unique constraints configuration & Cypher transaction handlers
+│   ├── main.py                 # FastAPI Application Config, lifespan setup, & route endpoints
+│   ├── nlp.py                  # spaCy entity classification & paragraph-level proximity mapper
+│   └── scraper.py              # BeautifulSoup user-agent rotating web page parser
 │
 ├── Dockerfile                  # Multi-stage production-ready build for Python app
 ├── docker-compose.yml          # Neo4j and Backend Orchestration
