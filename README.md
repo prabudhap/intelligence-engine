@@ -47,11 +47,25 @@ An automated, dockerized OSINT (Open Source Intelligence) pipeline that scrapes 
 graph TD
     User([User Browser]) -->|Scrape URL / View Graph| Frontend[Frontend: HTML5, CSS, JS, Vis.js]
     Frontend -->|HTTP REST API| Backend[FastAPI Backend]
-    Backend -->|Scrape Request| Scraper[BeautifulSoup & httpx Scraper]
-    Scraper -->|HTML Content| Backend
-    Backend -->|Text Ingestion| NLP[spaCy NLP Engine]
-    NLP -->|Extracted Entities| Backend
-    Backend -->|Cypher Transaction| Neo4j[(Neo4j Graph Database)]
+    
+    subgraph Ingestion & Processing
+        Backend -->|Enqueues Task| BackgroundExecutor[ThreadPoolExecutor Background Worker]
+        BackgroundExecutor -->|1. Scrape| Scraper[BeautifulSoup & httpx Scraper]
+        Scraper -->|2. Resolve Redirects| RedirectResolver[Google batchexecute API]
+        Scraper -->|HTML Content| NLP[spaCy NLP & Sentiment Engine]
+        NLP -->|Entities & Sentiment| DatabaseConnector[Neo4j Client Singleton]
+    end
+    
+    subgraph Scheduled Cron Pipelines
+        Scheduler[Interval Scheduler] -->|Every 6 Hours| GoogleNewsSync[Google News Ingestor]
+        GoogleNewsSync -->|Scrape & Extract| Scraper
+        
+        BackgroundExecutor -->|Enqueue Enrichment| EnrichmentSync[Open Web Enrichment Worker]
+        EnrichmentSync -->|Search & Scrape Company Context| Scraper
+    end
+
+    DatabaseConnector -->|Cypher Transaction| Neo4j[(Neo4j Graph Database)]
+    Neo4j -->|Read Graph & Stats| Backend
 ```
 
 ---
