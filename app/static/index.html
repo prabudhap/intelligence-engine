@@ -11,7 +11,7 @@
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom Style -->
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=3">
     <!-- vis.js Network Library for graph rendering -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 </head>
@@ -104,6 +104,17 @@
                             <div class="spinner"></div>
                             <div class="status-text">Scraping web article content...</div>
                         </div>
+                        <div class="divider" style="margin: 1.25rem 0; border-top: 1px dashed var(--border-color);"></div>
+                        <div class="cron-trigger-area">
+                            <button type="button" class="btn-secondary btn-full" id="googleNewsTriggerBtn" style="width: 100%; justify-content: center; padding: 0.85rem; border-color: rgba(99, 102, 241, 0.25);">
+                                <i class="fa-solid fa-cloud-arrow-down" style="color: var(--accent-primary);"></i>
+                                <span>Sync Google News (Top 20)</span>
+                            </button>
+                            <div id="googleNewsStatus" class="status-indicator hidden" style="margin-top: 0.75rem;">
+                                <div class="spinner"></div>
+                                <div class="status-text">Scraping & processing Google News...</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -159,12 +170,15 @@
                                 <thead>
                                     <tr>
                                         <th>Title</th>
+                                        <th>Category</th>
+                                        <th>Sentiment</th>
                                         <th>Processed</th>
+                                        <th>Article Link</th>
                                     </tr>
                                 </thead>
                                 <tbody id="recentArticlesBody">
                                     <tr>
-                                        <td colspan="2" class="empty-state">No articles in this workspace yet.</td>
+                                        <td colspan="5" class="empty-state">No articles in this workspace yet.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -224,6 +238,11 @@
                             <div class="legend-item" data-entity="people"><span class="legend-dot legend-person"></span> Person</div>
                             <div class="legend-item" data-entity="companies"><span class="legend-dot legend-company"></span> Company</div>
                             <div class="legend-item" data-entity="locations"><span class="legend-dot legend-location"></span> Location</div>
+                            <div class="legend-item" data-entity="years"><span class="legend-dot legend-year"></span> Year</div>
+                            <div class="legend-item" data-entity="months"><span class="legend-dot legend-month"></span> Month</div>
+                            <div class="legend-item" data-entity="weeks"><span class="legend-dot legend-week"></span> Week</div>
+                            <div class="legend-item" data-entity="days"><span class="legend-dot legend-day"></span> Day</div>
+                            <div class="legend-item" data-entity="periods"><span class="legend-dot legend-period"></span> Period (6h)</div>
                         </div>
                         <!-- Graph Container -->
                         <div id="networkGraphContainer" class="graph-canvas">
@@ -273,6 +292,6 @@
     </div>
 
     <!-- App Logic -->
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=3"></script>
 </body>
 </html>

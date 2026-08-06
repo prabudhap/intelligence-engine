@@ -1,5 +1,6 @@
 import logging
 import random
+import json
 import httpx
 from bs4 import BeautifulSoup
 
@@ -13,16 +14,66 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 ]
 
+def resolve_google_news_url(url: str, user_agent: str) -> str:
+    """
+    Resolves the original publisher URL from a Google News redirect URL.
+    """
+    try:
+        with httpx.Client(headers={"User-Agent": user_agent}, follow_redirects=True, timeout=10.0) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            c_wiz = soup.select_one('c-wiz[data-p]')
+            if not c_wiz:
+                logger.warning(f"c-wiz not found for Google News URL redirect: {url}")
+                return url
+            data_p = c_wiz.get('data-p')
+            if not data_p:
+                logger.warning(f"data-p not found for Google News URL redirect: {url}")
+                return url
+                
+            obj = json.loads(data_p.replace('%.@.', '["garturlreq",'))
+            payload_data = obj[:-6] + obj[-2:]
+            payload = {
+                'f.req': json.dumps([[["Fbv4je", json.dumps(payload_data), "null", "generic"]]])
+            }
+            
+            api_url = "https://news.google.com/_/DotsSplashUi/data/batchexecute"
+            response = client.post(api_url, headers={
+                'content-type': 'application/x-www-form-urlencoded;charset=UTF-8'
+            }, data=payload)
+            response.raise_for_status()
+            
+            response_text = response.text
+            if response_text.startswith(")]}'"):
+                response_text = response_text[4:]
+            
+            data = json.loads(response_text)
+            array_string = data[0][2]
+            final_url = json.loads(array_string)[1]
+            logger.info(f"🔗 Successfully resolved Google News URL redirect to: {final_url}")
+            return final_url
+    except Exception as e:
+        logger.error(f"❌ Failed to resolve Google News URL redirect: {e}")
+        return url
+
 def scrape_article(url: str) -> dict:
     """
     Fetches an article URL, parses the HTML, and returns the title and body text.
     """
+    user_agent = random.choice(USER_AGENTS)
     headers = {
-        "User-Agent": random.choice(USER_AGENTS),
+        "User-Agent": user_agent,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5"
     }
     
+    # Resolve Google News redirect if applicable
+    if "news.google.com" in url:
+        logger.info(f"📡 Resolving Google News redirect URL: {url}")
+        url = resolve_google_news_url(url, user_agent)
+        
     logger.info(f"🕸️ Attempting to scrape URL: {url}")
     
     try:
@@ -115,7 +166,8 @@ def scrape_article(url: str) -> dict:
         logger.info(f"🎉 Successfully scraped title: '{title}' ({len(body)} characters)")
         return {
             "title": title,
-            "body": body
+            "body": body,
+            "url": url
         }
     except Exception as e:
         logger.error(f"❌ Failed to parse page content for {url}: {e}")

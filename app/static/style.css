@@ -30,6 +30,22 @@
     --color-loc: #a855f7;      /* Purple */
     --color-loc-glow: rgba(168, 85, 247, 0.2);
     
+    /* Temporal Node Colors */
+    --color-year: #9ca3af;
+    --color-year-glow: rgba(156, 163, 175, 0.2);
+    
+    --color-month: #818cf8;
+    --color-month-glow: rgba(129, 140, 248, 0.2);
+    
+    --color-week: #38bdf8;
+    --color-week-glow: rgba(56, 189, 248, 0.2);
+    
+    --color-day: #34d399;
+    --color-day-glow: rgba(52, 211, 153, 0.2);
+    
+    --color-period: #fb923c;
+    --color-period-glow: rgba(251, 146, 60, 0.2);
+    
     --success: #10b981;
     --error: #ef4444;
 }
@@ -220,8 +236,6 @@ body {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    height: calc(100vh - 120px - 1.5rem);
-    overflow-y: auto;
     padding-right: 0.25rem;
 }
 
@@ -510,7 +524,7 @@ body {
 
 /* Graph Visualization Section */
 .card-graph {
-    height: calc(100vh - 120px - 1.5rem);
+    height: 700px;
 }
 
 .graph-header {
@@ -596,6 +610,11 @@ body {
 .legend-person { background-color: var(--color-person); }
 .legend-company { background-color: var(--color-company); }
 .legend-location { background-color: var(--color-loc); }
+.legend-year { background-color: var(--color-year); }
+.legend-month { background-color: var(--color-month); }
+.legend-week { background-color: var(--color-week); }
+.legend-day { background-color: var(--color-day); }
+.legend-period { background-color: var(--color-period); }
 
 /* Graph Canvas Container */
 .graph-canvas {
@@ -888,24 +907,20 @@ body {
     box-sizing: border-box;
 }
 
-/* Custom scrollbars for control panel and explanation steps */
-.control-panel::-webkit-scrollbar,
+/* Custom scrollbars for explanation steps */
 .explanation-steps::-webkit-scrollbar {
     width: 5px;
 }
 
-.control-panel::-webkit-scrollbar-track,
 .explanation-steps::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.control-panel::-webkit-scrollbar-thumb,
 .explanation-steps::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.08);
     border-radius: 4px;
 }
 
-.control-panel::-webkit-scrollbar-thumb:hover,
 .explanation-steps::-webkit-scrollbar-thumb:hover {
     background: rgba(99, 102, 241, 0.3);
 }
@@ -1102,4 +1117,71 @@ div.vis-tooltip {
     overflow-wrap: break-word;
     word-wrap: break-word;
     word-break: break-word;
+}
+
+/* Category & Sentiment Badges */
+.badge-tech {
+    background: rgba(129, 140, 248, 0.15);
+    border: 1px solid rgba(129, 140, 248, 0.35);
+    color: #a5b4fc;
+}
+.badge-finance {
+    background: rgba(251, 146, 60, 0.15);
+    border: 1px solid rgba(251, 146, 60, 0.35);
+    color: #fdba74;
+}
+.badge-geopolitics {
+    background: rgba(168, 85, 247, 0.15);
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    color: #c084fc;
+}
+.badge-defense {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+}
+.badge-healthcare {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+}
+.badge-general {
+    background: rgba(156, 163, 175, 0.15);
+    border: 1px solid rgba(156, 163, 175, 0.35);
+    color: #d1d5db;
+}
+
+.badge-positive {
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #10b981;
+    font-weight: 600;
+}
+.badge-negative {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    font-weight: 600;
+}
+.badge-neutral {
+    background: rgba(156, 163, 175, 0.15);
+    border: 1px solid rgba(156, 163, 175, 0.3);
+    color: #9ca3af;
+}
+
+/* Scroll handling is page-level by default */
+
+.article-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--accent-primary);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+.article-link-btn:hover {
+    color: #818cf8;
+    text-decoration: underline;
 }

@@ -75,7 +75,12 @@ document.addEventListener("DOMContentLoaded", () => {
     scrapeForm.addEventListener("submit", handleScrapeSubmit);
     pathfinderForm.addEventListener("submit", handlePathfinderSubmit);
     clearPathBtn.addEventListener("click", handleClearPath);
- 
+
+    const googleNewsTriggerBtn = document.getElementById("googleNewsTriggerBtn");
+    if (googleNewsTriggerBtn) {
+        googleNewsTriggerBtn.addEventListener("click", handleGoogleNewsTrigger);
+    }
+
     togglePhysicsBtn.addEventListener("click", () => {
         physicsEnabled = !physicsEnabled;
         togglePhysicsBtn.classList.toggle("active", physicsEnabled);
@@ -133,7 +138,7 @@ async function loadWorkspaces() {
 
         // Clear existing, keep default
         workspaceSelect.innerHTML = "";
-        
+
         // Ensure "Default" is present
         if (!orgs.includes("Default")) {
             orgs.unshift("Default");
@@ -171,7 +176,7 @@ async function fetchStats() {
     try {
         const response = await fetch(`/api/stats?org=${encodeURIComponent(activeWorkspace)}`);
         const stats = await response.json();
-        
+
         statArticles.textContent = stats.articles || 0;
         statPeople.textContent = stats.people || 0;
         statCompanies.textContent = stats.companies || 0;
@@ -192,7 +197,7 @@ async function fetchRecentArticles() {
         if (articles.length === 0) {
             recentArticlesBody.innerHTML = `
                 <tr>
-                    <td colspan="2" class="empty-state">No articles in this workspace yet.</td>
+                    <td colspan="5" class="empty-state">No articles in this workspace yet.</td>
                 </tr>
             `;
             return;
@@ -200,11 +205,23 @@ async function fetchRecentArticles() {
 
         articles.forEach(article => {
             const row = document.createElement("tr");
-            
+
             const titleCell = document.createElement("td");
             titleCell.textContent = article.title;
             titleCell.style.fontWeight = "500";
-            
+
+            const categoryCell = document.createElement("td");
+            const catBadge = document.createElement("span");
+            catBadge.className = "badge " + getCategoryClass(article.category);
+            catBadge.textContent = article.category || "General";
+            categoryCell.appendChild(catBadge);
+
+            const sentimentCell = document.createElement("td");
+            const sentBadge = document.createElement("span");
+            sentBadge.className = "badge " + getSentimentClass(article.sentiment);
+            sentBadge.textContent = article.sentiment || "Neutral";
+            sentimentCell.appendChild(sentBadge);
+
             const dateCell = document.createElement("td");
             dateCell.className = "time-stamp";
             if (article.created_at) {
@@ -214,8 +231,25 @@ async function fetchRecentArticles() {
                 dateCell.textContent = "N/A";
             }
 
+            const linkCell = document.createElement("td");
+            if (article.url) {
+                const link = document.createElement("a");
+                link.href = article.url;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.className = "article-link-btn";
+                link.innerHTML = `<i class="fa-solid fa-arrow-up-right-from-square"></i> Open`;
+                linkCell.appendChild(link);
+            } else {
+                linkCell.textContent = "N/A";
+                linkCell.style.color = "var(--text-muted)";
+            }
+
             row.appendChild(titleCell);
+            row.appendChild(categoryCell);
+            row.appendChild(sentimentCell);
             row.appendChild(dateCell);
+            row.appendChild(linkCell);
             recentArticlesBody.appendChild(row);
         });
     } catch (error) {
@@ -228,7 +262,7 @@ async function fetchGraphData() {
     try {
         const response = await fetch(`/api/graph?org=${encodeURIComponent(activeWorkspace)}`);
         const graph = await response.json();
-        
+
         const nodes = graph.nodes || [];
         const edges = graph.edges || [];
 
@@ -273,13 +307,28 @@ function renderNetwork(nodesArray, edgesArray) {
     const styledNodes = nodesArray.map((node, index) => {
         let size = 12;
         let font = { color: "#ffffff", size: 12, face: "Outfit" };
-        
+
         if (node.group === "Organization") {
             size = 22;
             font = { color: "#ffffff", size: 14, bold: true, face: "Outfit" };
         } else if (node.group === "Article") {
             size = 18;
             font = { color: "#e1e7ec", size: 12, face: "Outfit" };
+        } else if (node.group === "Year") {
+            size = 24;
+            font = { color: "#ffffff", size: 13, bold: true, face: "Outfit" };
+        } else if (node.group === "Month") {
+            size = 20;
+            font = { color: "#ffffff", size: 12, bold: true, face: "Outfit" };
+        } else if (node.group === "Week") {
+            size = 17;
+            font = { color: "#ffffff", size: 11, face: "Outfit" };
+        } else if (node.group === "Day") {
+            size = 15;
+            font = { color: "#ffffff", size: 11, face: "Outfit" };
+        } else if (node.group === "TimePeriod") {
+            size = 14;
+            font = { color: "#ffffff", size: 10, face: "Outfit" };
         }
 
         const extra = {};
@@ -309,6 +358,16 @@ function renderNetwork(nodesArray, edgesArray) {
             friendlyLabel = "Located In";
         } else if (friendlyLabel === "UNDER_WORKSPACE") {
             friendlyLabel = "Workspace Link";
+        } else if (friendlyLabel === "HAS_MONTH") {
+            friendlyLabel = "Month";
+        } else if (friendlyLabel === "HAS_WEEK") {
+            friendlyLabel = "Week";
+        } else if (friendlyLabel === "HAS_DAY") {
+            friendlyLabel = "Day";
+        } else if (friendlyLabel === "HAS_PERIOD") {
+            friendlyLabel = "Period";
+        } else if (friendlyLabel === "HAS_ARTICLE") {
+            friendlyLabel = "Article Link";
         }
 
         return {
@@ -394,6 +453,41 @@ function renderNetwork(nodesArray, edgesArray) {
                     border: "#8b5cf6",
                     highlight: { background: "#c084fc", border: "#a855f7" }
                 }
+            },
+            Year: {
+                color: {
+                    background: "#9ca3af",
+                    border: "#4b5563",
+                    highlight: { background: "#d1d5db", border: "#9ca3af" }
+                }
+            },
+            Month: {
+                color: {
+                    background: "#818cf8",
+                    border: "#4f46e5",
+                    highlight: { background: "#a5b4fc", border: "#818cf8" }
+                }
+            },
+            Week: {
+                color: {
+                    background: "#38bdf8",
+                    border: "#0284c7",
+                    highlight: { background: "#7dd3fc", border: "#38bdf8" }
+                }
+            },
+            Day: {
+                color: {
+                    background: "#34d399",
+                    border: "#059669",
+                    highlight: { background: "#6ee7b7", border: "#34d399" }
+                }
+            },
+            TimePeriod: {
+                color: {
+                    background: "#fb923c",
+                    border: "#ea580c",
+                    highlight: { background: "#fdba74", border: "#fb923c" }
+                }
             }
         },
         physics: {
@@ -421,10 +515,10 @@ function renderNetwork(nodesArray, edgesArray) {
     };
 
     console.log("renderNetwork called with nodes:", nodesArray, "edges:", edgesArray);
-    
+
     // Recreate canvas element to clean legacy structures
     networkGraphContainer.innerHTML = "";
-    
+
     try {
         networkInstance = new vis.Network(networkGraphContainer, data, options);
         console.log("vis.Network instance successfully created.");
@@ -540,15 +634,15 @@ function renderNetwork(nodesArray, edgesArray) {
 function highlightNeighbors(selectedNodeId, nodesDataset, edgesDataset) {
     const connectedEdges = networkInstance.getConnectedEdges(selectedNodeId);
     const connectedNodes = networkInstance.getConnectedNodes(selectedNodeId);
-    
+
     const allNodes = nodesDataset.get();
     const allEdges = edgesDataset.get();
-    
+
     const updatedNodes = allNodes.map(node => {
         const isNeighbor = connectedNodes.includes(node.id) || node.id === selectedNodeId;
         let fontColor = "#ffffff";
         if (node.group === "Article") fontColor = "#e1e7ec";
-        
+
         return {
             id: node.id,
             color: {
@@ -560,7 +654,7 @@ function highlightNeighbors(selectedNodeId, nodesDataset, edgesDataset) {
             }
         };
     });
-    
+
     const updatedEdges = allEdges.map(edge => {
         const isConnected = connectedEdges.includes(edge.id);
         return {
@@ -570,7 +664,7 @@ function highlightNeighbors(selectedNodeId, nodesDataset, edgesDataset) {
             }
         };
     });
-    
+
     nodesDataset.update(updatedNodes);
     edgesDataset.update(updatedEdges);
 }
@@ -579,7 +673,7 @@ function highlightNeighbors(selectedNodeId, nodesDataset, edgesDataset) {
 function resetHighlights(nodesDataset, edgesDataset) {
     const allNodes = nodesDataset.get();
     const allEdges = edgesDataset.get();
-    
+
     const updatedNodes = allNodes.map(node => {
         let fontColor = "#ffffff";
         if (node.group === "Article") fontColor = "#e1e7ec";
@@ -594,7 +688,7 @@ function resetHighlights(nodesDataset, edgesDataset) {
             }
         };
     });
-    
+
     const updatedEdges = allEdges.map(edge => {
         return {
             id: edge.id,
@@ -603,7 +697,7 @@ function resetHighlights(nodesDataset, edgesDataset) {
             }
         };
     });
-    
+
     nodesDataset.update(updatedNodes);
     edgesDataset.update(updatedEdges);
 }
@@ -636,12 +730,12 @@ async function handleScrapeSubmit(e) {
         }
 
         const data = await response.json();
-        
+
         // Flash success status
         const textEl = scraperStatus.querySelector(".status-text");
         textEl.textContent = `Queued: "${data.title.substring(0, 40)}..."`;
         scraperStatus.style.borderColor = "var(--success)";
-        
+
         scrapeUrlInput.value = "";
 
         // Reload lists/graphs in cycles so background threads show updates
@@ -652,7 +746,15 @@ async function handleScrapeSubmit(e) {
 
         setTimeout(() => {
             updateDashboardData();
-        }, 3000);
+        }, 4000);
+
+        setTimeout(() => {
+            updateDashboardData();
+        }, 8000);
+
+        setTimeout(() => {
+            updateDashboardData();
+        }, 13000);
 
         setTimeout(() => {
             updateDashboardData();
@@ -661,12 +763,12 @@ async function handleScrapeSubmit(e) {
             scraperStatus.classList.add("hidden");
             scraperStatus.style.borderColor = "var(--border-color)";
             scrapeSubmitBtn.disabled = false;
-        }, 5000);
+        }, 18000);
 
     } catch (error) {
         console.error("Scraping operation failed:", error);
         alert(`Failed to ingest article: ${error.message}`);
-        
+
         // Reset loader status
         scraperStatus.classList.add("hidden");
         scrapeSubmitBtn.disabled = false;
@@ -689,9 +791,9 @@ async function handlePathfinderSubmit(e) {
             const err = await response.json();
             throw new Error(err.detail || "Failed to find shortest path.");
         }
-        
+
         const pathData = await response.json();
-        
+
         if (!pathData.nodes || pathData.nodes.length === 0) {
             alert(`No connection found between "${source}" and "${target}".`);
             findPathBtn.disabled = false;
@@ -700,7 +802,7 @@ async function handlePathfinderSubmit(e) {
 
         // Render ONLY the isolated path nodes and edges in the network canvas
         renderNetwork(pathData.nodes, pathData.edges);
-        
+
         // Also update the connections list table below to display only the path connections
         renderConnectionsTable(pathData.nodes, pathData.edges);
 
@@ -822,12 +924,12 @@ function reconstructPathSteps(nodesArray, edgesArray, sourceName, targetName) {
 function getFriendlyRelationText(step) {
     const fromLabel = `<span class="badge badge-${step.from.group.toLowerCase()}">${step.from.label}</span>`;
     const toLabel = `<span class="badge badge-${step.to.group.toLowerCase()}">${step.to.label}</span>`;
-    
+
     const rel = step.relation;
     const isForward = step.direction === "forward";
 
     if (rel === "MENTIONED_IN") {
-        return isForward 
+        return isForward
             ? `${fromLabel} is mentioned in the article ${toLabel}`
             : `the article ${fromLabel} mentions ${toLabel}`;
     }
@@ -855,9 +957,9 @@ function getFriendlyRelationText(step) {
 // Render dynamic relationships table
 function renderConnectionsTable(nodes, edges) {
     if (!connectionsTableBody) return;
-    
+
     connectionsTableBody.innerHTML = "";
-    
+
     if (edges.length === 0) {
         connectionsTableBody.innerHTML = `
             <tr>
@@ -866,39 +968,39 @@ function renderConnectionsTable(nodes, edges) {
         `;
         return;
     }
-    
+
     // Create a lookup map for node data
     const nodeMap = new Map();
     nodes.forEach(node => {
         nodeMap.set(node.id, node);
     });
-    
+
     edges.forEach(edge => {
         const sourceNode = nodeMap.get(edge.from);
         const targetNode = nodeMap.get(edge.to);
-        
+
         if (!sourceNode || !targetNode) return;
-        
+
         const row = document.createElement("tr");
-        
+
         // Source Cell
         const sourceCell = document.createElement("td");
         const sourceGroup = sourceNode.group || "Unknown";
         sourceCell.innerHTML = `<span class="badge badge-${sourceGroup.toLowerCase()}">${sourceNode.label}</span>`;
-        
+
         // Relation/Edge Label Cell
         const relationCell = document.createElement("td");
         relationCell.innerHTML = `<span class="relation-code">${edge.label}</span>`;
-        
+
         // Target Cell
         const targetCell = document.createElement("td");
         const targetGroup = targetNode.group || "Unknown";
         targetCell.innerHTML = `<span class="badge badge-${targetGroup.toLowerCase()}">${targetNode.label}</span>`;
-        
+
         row.appendChild(sourceCell);
         row.appendChild(relationCell);
         row.appendChild(targetCell);
-        
+
         connectionsTableBody.appendChild(row);
     });
 }
@@ -909,9 +1011,9 @@ function openEntityDetailsModal(entityType) {
     const modalTitle = document.getElementById("modalTitle");
     const modalTableHead = document.getElementById("modalTableHead");
     const modalTableBody = document.getElementById("modalTableBody");
-    
+
     if (!modal || !modalTitle || !modalTableHead || !modalTableBody) return;
-    
+
     let groupFilter = "";
     let columns = [];
     if (entityType === "articles") {
@@ -937,17 +1039,17 @@ function openEntityDetailsModal(entityType) {
     } else {
         return;
     }
-    
+
     // Set Header
     modalTableHead.innerHTML = `
         <tr>
             ${columns.map(col => `<th>${col}</th>`).join("")}
         </tr>
     `;
-    
+
     // Filter Nodes
     const filteredNodes = currentNodes.filter(node => node.group === groupFilter);
-    
+
     // Populate Body
     modalTableBody.innerHTML = "";
     if (filteredNodes.length === 0) {
@@ -959,21 +1061,21 @@ function openEntityDetailsModal(entityType) {
     } else {
         filteredNodes.forEach(node => {
             const row = document.createElement("tr");
-            
+
             const nameCell = document.createElement("td");
             nameCell.style.fontWeight = "500";
             nameCell.textContent = node.label;
-            
+
             const groupCell = document.createElement("td");
             const nodeGroup = node.group || "Unknown";
             groupCell.innerHTML = `<span class="badge badge-${nodeGroup.toLowerCase()}">${nodeGroup}</span>`;
-            
+
             row.appendChild(nameCell);
             row.appendChild(groupCell);
             modalTableBody.appendChild(row);
         });
     }
-    
+
     // Show Modal
     modal.classList.remove("hidden");
 }
@@ -981,16 +1083,16 @@ function openEntityDetailsModal(entityType) {
 // Populate the Pathfinder Source/Target Dropdown select menus
 function populatePathfinderSelects(nodes) {
     if (!pathSourceSelect || !pathTargetSelect) return;
-    
+
     // Save current values to restore if they still exist
     const prevSource = pathSourceSelect.value;
     const prevTarget = pathTargetSelect.value;
-    
+
     pathSourceSelect.innerHTML = '<option value="" disabled selected>Select source...</option>';
     pathTargetSelect.innerHTML = '<option value="" disabled selected>Select target...</option>';
-    
+
     if (nodes.length === 0) return;
-    
+
     // Categorize nodes by group/type
     const groups = {
         Person: [],
@@ -999,7 +1101,7 @@ function populatePathfinderSelects(nodes) {
         Article: [],
         Organization: []
     };
-    
+
     nodes.forEach(node => {
         const grp = node.group || "Unknown";
         if (groups[grp]) {
@@ -1008,12 +1110,12 @@ function populatePathfinderSelects(nodes) {
             groups[grp] = [node];
         }
     });
-    
+
     // Sort nodes inside each group alphabetically by label
     for (const grp in groups) {
         groups[grp].sort((a, b) => a.label.localeCompare(b.label));
     }
-    
+
     // Generate option elements grouped in optgroups
     const groupLabels = {
         Person: "People",
@@ -1022,43 +1124,43 @@ function populatePathfinderSelects(nodes) {
         Article: "Articles",
         Organization: "Workspaces"
     };
-    
+
     const docFragmentSource = document.createDocumentFragment();
     const docFragmentTarget = document.createDocumentFragment();
-    
+
     for (const grp of ["Person", "Company", "Location", "Article", "Organization"]) {
         const list = groups[grp] || [];
         if (list.length === 0) continue;
-        
+
         const optgroupSource = document.createElement("optgroup");
         optgroupSource.label = groupLabels[grp];
-        
+
         const optgroupTarget = document.createElement("optgroup");
         optgroupTarget.label = groupLabels[grp];
-        
+
         list.forEach(node => {
             const optionSource = document.createElement("option");
             optionSource.value = node.label;
             optionSource.textContent = node.label;
             optgroupSource.appendChild(optionSource);
-            
+
             const optionTarget = document.createElement("option");
             optionTarget.value = node.label;
             optionTarget.textContent = node.label;
             optgroupTarget.appendChild(optionTarget);
         });
-        
+
         docFragmentSource.appendChild(optgroupSource);
         docFragmentTarget.appendChild(optgroupTarget);
     }
-    
+
     pathSourceSelect.appendChild(docFragmentSource);
     pathTargetSelect.appendChild(docFragmentTarget);
-    
+
     // Restore selection if nodes are still present in active graph
     const sourceExists = nodes.some(n => n.label === prevSource);
     if (sourceExists) pathSourceSelect.value = prevSource;
-    
+
     const targetExists = nodes.some(n => n.label === prevTarget);
     if (targetExists) pathTargetSelect.value = prevTarget;
 }
@@ -1113,5 +1215,95 @@ function hideGraphInfoBox() {
     if (infoBox) {
         infoBox.classList.remove("visible");
     }
+}
+
+async function handleGoogleNewsTrigger() {
+    const triggerBtn = document.getElementById("googleNewsTriggerBtn");
+    const statusDiv = document.getElementById("googleNewsStatus");
+    if (!triggerBtn || !statusDiv) return;
+
+    triggerBtn.disabled = true;
+    statusDiv.classList.remove("hidden");
+
+    try {
+        const response = await fetch("/api/cron/google-news", {
+            method: "POST"
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to trigger Google News ingestion.");
+        }
+
+        const data = await response.json();
+        const textEl = statusDiv.querySelector(".status-text");
+        textEl.textContent = "Sync started in background! Preparing workspaces...";
+        statusDiv.style.borderColor = "var(--success)";
+
+        // Refresh list of workspaces and select Google News if present
+        setTimeout(() => {
+            loadWorkspaces().then(() => {
+                let exists = false;
+                for (let i = 0; i < workspaceSelect.options.length; i++) {
+                    if (workspaceSelect.options[i].value === "Google News") {
+                        exists = true;
+                        workspaceSelect.selectedIndex = i;
+                        activeWorkspace = "Google News";
+                        break;
+                    }
+                }
+                updateDashboardData();
+            });
+        }, 3000);
+
+        // Keep updating data as ingestion runs in background
+        setTimeout(() => {
+            updateDashboardData();
+        }, 8000);
+
+        setTimeout(() => {
+            updateDashboardData();
+        }, 15000);
+
+        setTimeout(() => {
+            updateDashboardData();
+        }, 22000);
+
+        setTimeout(() => {
+            updateDashboardData();
+        }, 3000);
+
+        setTimeout(() => {
+            updateDashboardData();
+            statusDiv.classList.add("hidden");
+            statusDiv.style.borderColor = "var(--border-color)";
+            textEl.textContent = "Scraping & processing Google News...";
+            triggerBtn.disabled = false;
+        }, 35000);
+
+    } catch (error) {
+        console.error("Google News Sync failed:", error);
+        alert(`Failed to sync Google News: ${error.message}`);
+        statusDiv.classList.add("hidden");
+        triggerBtn.disabled = false;
+    }
+}
+
+function getCategoryClass(category) {
+    if (!category) return "badge-general";
+    const cat = category.toLowerCase();
+    if (cat === "technology" || cat === "tech") return "badge-tech";
+    if (cat === "finance") return "badge-finance";
+    if (cat === "geopolitics") return "badge-geopolitics";
+    if (cat === "defense") return "badge-defense";
+    if (cat === "healthcare") return "badge-healthcare";
+    return "badge-general";
+}
+
+function getSentimentClass(sentiment) {
+    if (!sentiment) return "badge-neutral";
+    const sent = sentiment.toLowerCase();
+    if (sent === "positive") return "badge-positive";
+    if (sent === "negative") return "badge-negative";
+    return "badge-neutral";
 }
 
