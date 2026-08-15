@@ -1,12 +1,11 @@
 import xml.etree.ElementTree as ET
 import httpx
-import logging
 import urllib.parse
-from app.scraper import scrape_article
+
+from app.core import logger
+from app.extractors.scraper import scrape_article
 from app.nlp import extract_entities
 from app.database import Database
-
-logger = logging.getLogger("uvicorn.error")
 
 def search_news_for_entity(entity_name: str) -> list:
     """

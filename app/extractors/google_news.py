@@ -1,11 +1,10 @@
 import xml.etree.ElementTree as ET
 import httpx
-import logging
-from app.scraper import scrape_article
+
+from app.core import logger
+from app.extractors.scraper import scrape_article
 from app.nlp import extract_entities
 from app.database import Database
-
-logger = logging.getLogger("uvicorn.error")
 
 def parse_google_news_feed() -> list:
     url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
