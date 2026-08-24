@@ -11,7 +11,7 @@
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom Style -->
-    <link rel="stylesheet" href="/static/style.css?v=3">
+    <link rel="stylesheet" href="/static/style.css?v=110">
     <!-- vis.js Network Library for graph rendering -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 </head>
@@ -221,9 +221,23 @@
                             <h2><i class="fa-solid fa-diagram-project"></i> Entity Network Explorer</h2>
                             <span class="card-subtitle">Physics-driven relationship graph</span>
                         </div>
-                        <div class="graph-controls">
+                        <div class="graph-controls" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                            <div class="selector-wrapper limit-selector-wrapper">
+                                <i class="fa-solid fa-layer-group"></i>
+                                <select id="graphLimitSelect" class="graph-limit-select">
+                                    <option value="30" selected>Top 30 Articles</option>
+                                    <option value="50">Top 50 Articles</option>
+                                    <option value="100">Top 100 Articles</option>
+                                </select>
+                            </div>
+                            <button id="toggleTimeTreeBtn" class="btn-toggle" title="Toggle Date Tree Hierarchy Nodes">
+                                <i class="fa-solid fa-calendar-days"></i> Time Tree
+                            </button>
                             <button id="togglePhysicsBtn" class="btn-toggle active" title="Toggle Graph Physics Simulation">
                                 <i class="fa-solid fa-wind"></i> Physics
+                            </button>
+                            <button id="consolidateEntitiesBtn" class="btn-secondary" title="Consolidate Duplicate Entity Aliases (e.g. Elon -> Elon Musk)">
+                                <i class="fa-solid fa-code-merge"></i> Merge Aliases
                             </button>
                             <button id="resetGraphBtn" class="btn-secondary" title="Recenter Graph">
                                 <i class="fa-solid fa-arrows-to-eye"></i> Recenter
@@ -292,6 +306,6 @@
     </div>
 
     <!-- App Logic -->
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=110"></script>
 </body>
 </html>

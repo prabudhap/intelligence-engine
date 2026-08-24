@@ -66,3 +66,20 @@ class Database(DatabaseRepository):
                             logger.error(f"Fallback constraint creation failed: {e2}")
         except Exception as e:
             logger.warning(f"Error during constraint creation loop: {e}")
+
+        # Range indexes for Article.created_at and Article.url
+        try:
+            with self.get_session() as session:
+                try:
+                    session.run("CREATE INDEX article_created_at_idx IF NOT EXISTS FOR (a:Article) ON (a.created_at)")
+                    session.run("CREATE INDEX article_url_idx IF NOT EXISTS FOR (a:Article) ON (a.url)")
+                except Exception as e:
+                    # Legacy Neo4j 4.x index creation fallback
+                    try:
+                        session.run("CREATE INDEX article_created_at_idx IF NOT EXISTS ON :Article(created_at)")
+                        session.run("CREATE INDEX article_url_idx IF NOT EXISTS ON :Article(url)")
+                    except Exception as e2:
+                        logger.error(f"Fallback index creation failed: {e2}")
+        except Exception as e:
+            logger.warning(f"Error during index creation: {e}")
+

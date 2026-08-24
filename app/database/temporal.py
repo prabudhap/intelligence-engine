@@ -55,7 +55,70 @@ def get_temporal_info(pub_date_str: str | None = None) -> dict:
         "timestamp": int(dt.timestamp() * 1000)
     }
 
+def extract_context_from_text(body: str, name1: str, name2: str) -> dict:
+    """
+    Extracts sentence-level and paragraph-level context for two entities from article body text in memory.
+    """
+    if not body or not (name1 or name2):
+        return {"context": "", "full_context": ""}
+        
+    paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+    
+    # 1. Search for paragraph containing both names
+    matched_paragraph = ""
+    for p in paragraphs:
+        if name1.lower() in p.lower() and name2.lower() in p.lower():
+            matched_paragraph = p
+            break
+            
+    # 2. Fallback: Search for paragraph containing at least one of them
+    if not matched_paragraph:
+        for p in paragraphs:
+            if name1.lower() in p.lower() or name2.lower() in p.lower():
+                matched_paragraph = p
+                break
+                
+    if not matched_paragraph:
+        return {"context": "", "full_context": ""}
+        
+    sentences = re.split(r'(?<=[.!?])\s+', matched_paragraph)
+    relevant_sentences = []
+    
+    for s in sentences:
+        if name1.lower() in s.lower() and name2.lower() in s.lower():
+            relevant_sentences.append(s)
+            
+    if not relevant_sentences:
+        for s in sentences:
+            if name1.lower() in s.lower() or name2.lower() in s.lower():
+                relevant_sentences.append(s)
+                
+    if not relevant_sentences and sentences:
+        relevant_sentences.append(sentences[0])
+        
+    summary = " ".join(relevant_sentences).strip()
+    if len(summary) > 280:
+        summary = summary[:277] + "..."
+        
+    return {"context": summary, "full_context": matched_paragraph}
+
+def extract_context_from_bodies(bodies: list[str], name1: str, name2: str) -> dict:
+    """
+    Searches a list of in-memory article bodies for matching entity relationship context.
+    """
+    best_context = {"context": "", "full_context": ""}
+    for body in bodies:
+        ctx = extract_context_from_text(body, name1, name2)
+        if ctx["context"]:
+            return ctx
+        if not best_context["full_context"] and ctx["full_context"]:
+            best_context = ctx
+    return best_context
+
 def get_relationship_context(session, rel_type: str, start_id: str, end_id: str) -> dict:
+    """
+    Legacy database-backed relationship context extractor fallback.
+    """
     query = """
         MATCH (n1) WHERE elementId(n1) = $start_id
         MATCH (n2) WHERE elementId(n2) = $end_id
@@ -77,51 +140,5 @@ def get_relationship_context(session, rel_type: str, start_id: str, end_id: str)
         
     name1 = record.get("name1") or record.get("title1") or ""
     name2 = record.get("name2") or record.get("title2") or ""
-    body = record.get("body")
-    
-    # Split body into paragraphs
-    paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
-    
-    # 1. Search for paragraph containing both names
-    matched_paragraph = ""
-    for p in paragraphs:
-        if name1.lower() in p.lower() and name2.lower() in p.lower():
-            matched_paragraph = p
-            break
-            
-    # 2. Fallback: Search for paragraph containing at least one of them
-    if not matched_paragraph:
-        for p in paragraphs:
-            if name1.lower() in p.lower() or name2.lower() in p.lower():
-                matched_paragraph = p
-                break
-                
-    if not matched_paragraph:
-        return {"context": "", "full_context": ""}
-        
-    # Split paragraph into sentences using regular expression terminal punctuation matching
-    sentences = re.split(r'(?<=[.!?])\s+', matched_paragraph)
-    relevant_sentences = []
-    
-    # Keep sentences containing both names
-    for s in sentences:
-        if name1.lower() in s.lower() and name2.lower() in s.lower():
-            relevant_sentences.append(s)
-            
-    # If none, keep sentences containing at least one of the names
-    if not relevant_sentences:
-        for s in sentences:
-            if name1.lower() in s.lower() or name2.lower() in s.lower():
-                relevant_sentences.append(s)
-                
-    # Fallback to the first sentence if none match specifically
-    if not relevant_sentences and sentences:
-        relevant_sentences.append(sentences[0])
-        
-    summary = " ".join(relevant_sentences).strip()
-    
-    # Cap length at 280 characters to keep it compact and readable in tooltips
-    if len(summary) > 280:
-        summary = summary[:277] + "..."
-        
-    return {"context": summary, "full_context": matched_paragraph}
+    return extract_context_from_text(record.get("body"), name1, name2)
+

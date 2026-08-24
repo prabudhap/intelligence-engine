@@ -3,6 +3,9 @@ let activeWorkspace = "Default";
 let networkInstance = null;
 let physicsEnabled = true;
 let currentNodes = [];
+let currentEdges = [];
+let includeTimeTree = false;
+let graphLimit = 30;
 
 // DOM Elements
 const workspaceSelect = document.getElementById("workspaceSelect");
@@ -30,6 +33,12 @@ const clearPathBtn = document.getElementById("clearPathBtn");
 
 // Initialize Dashboard
 document.addEventListener("DOMContentLoaded", () => {
+    // Initialize custom dark dropdowns (replaces native OS popups)
+    initCustomSelect(workspaceSelect);
+    initCustomSelect(document.getElementById("graphLimitSelect"));
+    initCustomSelect(pathSourceSelect);
+    initCustomSelect(pathTargetSelect);
+
     // Load workspaces
     loadWorkspaces().then(() => {
         // Trigger initial data load
@@ -69,6 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         newWorkspaceInput.value = "";
+        refreshCustomSelect(workspaceSelect);
         updateDashboardData();
     });
 
@@ -94,6 +104,42 @@ document.addEventListener("DOMContentLoaded", () => {
             networkInstance.fit({ animation: true });
         }
     });
+
+    const toggleTimeTreeBtn = document.getElementById("toggleTimeTreeBtn");
+    if (toggleTimeTreeBtn) {
+        toggleTimeTreeBtn.addEventListener("click", () => {
+            includeTimeTree = !includeTimeTree;
+            toggleTimeTreeBtn.classList.toggle("active", includeTimeTree);
+            fetchGraphData();
+        });
+    }
+
+    const consolidateEntitiesBtn = document.getElementById("consolidateEntitiesBtn");
+    if (consolidateEntitiesBtn) {
+        consolidateEntitiesBtn.addEventListener("click", async () => {
+            consolidateEntitiesBtn.disabled = true;
+            consolidateEntitiesBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Merging...';
+            try {
+                const res = await fetch(`/api/consolidate?org=${encodeURIComponent(activeWorkspace)}`, { method: "POST" });
+                const data = await res.json();
+                console.log("Entity Consolidation Response:", data);
+                await updateDashboardData();
+            } catch (err) {
+                console.error("Entity Consolidation Failed:", err);
+            } finally {
+                consolidateEntitiesBtn.disabled = false;
+                consolidateEntitiesBtn.innerHTML = '<i class="fa-solid fa-code-merge"></i> Merge Aliases';
+            }
+        });
+    }
+
+    const graphLimitSelect = document.getElementById("graphLimitSelect");
+    if (graphLimitSelect) {
+        graphLimitSelect.addEventListener("change", (e) => {
+            graphLimit = parseInt(e.target.value, 10) || 30;
+            fetchGraphData();
+        });
+    }
 
     // Stats Cards & Legend Items Click Interactivity
     document.querySelectorAll(".stat-card, .legend-item[data-entity]").forEach(item => {
@@ -159,6 +205,8 @@ async function loadWorkspaces() {
             workspaceSelect.value = orgs[0];
             activeWorkspace = orgs[0];
         }
+
+        refreshCustomSelect(workspaceSelect);
     } catch (error) {
         console.error("Failed to load workspace list:", error);
     }
@@ -260,7 +308,7 @@ async function fetchRecentArticles() {
 // Fetch and render workspace network graph
 async function fetchGraphData() {
     try {
-        const response = await fetch(`/api/graph?org=${encodeURIComponent(activeWorkspace)}`);
+        const response = await fetch(`/api/graph?org=${encodeURIComponent(activeWorkspace)}&limit=${graphLimit}&include_time_tree=${includeTimeTree}`);
         const graph = await response.json();
 
         const nodes = graph.nodes || [];
@@ -287,6 +335,7 @@ async function fetchGraphData() {
         }
 
         currentNodes = nodes;
+        currentEdges = edges;
         renderNetwork(nodes, edges);
         renderConnectionsTable(nodes, edges);
         populatePathfinderSelects(nodes);
@@ -347,32 +396,36 @@ function renderNetwork(nodesArray, edgesArray) {
         };
     });
 
-    // Map edges to be user-friendly and add hover tooltips
-    const styledEdges = edgesArray.map(edge => {
-        let friendlyLabel = edge.label;
-        if (friendlyLabel === "INDIRECTLY_INVOLVED_WITH") {
-            friendlyLabel = "Indirect Association";
-        } else if (friendlyLabel === "MENTIONED_IN") {
-            friendlyLabel = "Mentioned In";
-        } else if (friendlyLabel === "LOCATED_IN") {
-            friendlyLabel = "Located In";
-        } else if (friendlyLabel === "UNDER_WORKSPACE") {
-            friendlyLabel = "Workspace Link";
-        } else if (friendlyLabel === "HAS_MONTH") {
-            friendlyLabel = "Month";
-        } else if (friendlyLabel === "HAS_WEEK") {
-            friendlyLabel = "Week";
-        } else if (friendlyLabel === "HAS_DAY") {
-            friendlyLabel = "Day";
-        } else if (friendlyLabel === "HAS_PERIOD") {
-            friendlyLabel = "Period";
-        } else if (friendlyLabel === "HAS_ARTICLE") {
-            friendlyLabel = "Article Link";
-        }
+    // Declarative label formatters map
+    const EDGE_LABEL_FORMATTERS = {
+        "INDIRECTLY_INVOLVED_WITH": (w) => w > 1 ? `Indirect Association (${w}x)` : "Indirect Association",
+        "CO_OCCURRED_WITH": (w) => `Co-occurred (${w} article${w > 1 ? 's' : ''})`,
+        "LOCATED_IN": (w) => w > 1 ? `Located In (${w}x)` : "Located In",
+        "MENTIONED_IN": () => "Mentioned In",
+        "UNDER_WORKSPACE": () => "Workspace Link",
+        "HAS_MONTH": () => "Month",
+        "HAS_WEEK": () => "Week",
+        "HAS_DAY": () => "Day",
+        "HAS_PERIOD": () => "Period",
+        "HAS_ARTICLE": () => "Article Link"
+    };
+
+    // Map edges to be user-friendly with explicit string IDs, dynamic weights, and visual line thickness
+    const styledEdges = edgesArray.map((edge, idx) => {
+        const weight = edge.weight || 1;
+        const formatter = EDGE_LABEL_FORMATTERS[edge.label];
+        const friendlyLabel = formatter ? formatter(weight) : edge.label;
+        const width = Math.min(1.5 + (weight - 1) * 1.2, 7);
+        const fromId = String(edge.from);
+        const toId = String(edge.to);
 
         return {
+            id: edge.id ? String(edge.id) : `e_${fromId}_${toId}_${idx}`,
             ...edge,
-            label: friendlyLabel
+            from: fromId,
+            to: toId,
+            label: friendlyLabel,
+            width: width
         };
     });
 
@@ -415,7 +468,8 @@ function renderNetwork(nodesArray, edgesArray) {
                 strokeWidth: 0
             },
             smooth: {
-                type: "dynamic"
+                type: "continuous",
+                roundness: 0.2
             }
         },
         groups: {
@@ -505,6 +559,7 @@ function renderNetwork(nodesArray, edgesArray) {
                 enabled: nodesArray.length > 10,
                 iterations: 150,
                 updateInterval: 25,
+                onlyDynamicEdges: false,
                 fit: nodesArray.length > 10
             }
         },
@@ -523,7 +578,84 @@ function renderNetwork(nodesArray, edgesArray) {
         networkInstance = new vis.Network(networkGraphContainer, data, options);
         console.log("vis.Network instance successfully created.");
 
-        // Setup Hover and Select Edge Events for Graph Information Box
+        // Spotlight Focus Mode: Dim unrelated nodes/edges and show clear entity names at the end of all connected threads
+        function applySpotlightFocus(selectedEdgeId, selectedNodeId) {
+            let targetNodeIds = new Set();
+            let targetEdgeIds = new Set();
+
+            const selNodeStr = selectedNodeId !== null && selectedNodeId !== undefined ? String(selectedNodeId) : null;
+            const selEdgeStr = selectedEdgeId !== null && selectedEdgeId !== undefined ? String(selectedEdgeId) : null;
+
+            if (selEdgeStr) {
+                targetEdgeIds.add(selEdgeStr);
+                const matchingEdge = styledEdges.find(e => String(e.id) === selEdgeStr);
+                if (matchingEdge) {
+                    targetNodeIds.add(String(matchingEdge.from));
+                    targetNodeIds.add(String(matchingEdge.to));
+                }
+            } else if (selNodeStr) {
+                targetNodeIds.add(selNodeStr);
+                styledEdges.forEach(edge => {
+                    const fromStr = String(edge.from);
+                    const toStr = String(edge.to);
+                    if (fromStr === selNodeStr || toStr === selNodeStr) {
+                        targetEdgeIds.add(String(edge.id));
+                        targetNodeIds.add(fromStr);
+                        targetNodeIds.add(toStr);
+                    }
+                });
+            }
+
+            if (targetNodeIds.size === 0 && targetEdgeIds.size === 0) {
+                resetSpotlightFocus();
+                return;
+            }
+
+            const updatedNodes = styledNodes.map(node => {
+                const nodeIdStr = String(node.id);
+                const isFocused = targetNodeIds.has(nodeIdStr);
+                const isSelectedSelf = selNodeStr && nodeIdStr === selNodeStr;
+
+                return {
+                    id: node.id,
+                    opacity: isFocused ? 1.0 : 0.12,
+                    font: {
+                        color: isFocused ? (isSelectedSelf ? "#00e5ff" : "#ffffff") : "rgba(255, 255, 255, 0.1)",
+                        size: isFocused ? 13 : 9,
+                        face: "Outfit",
+                        bold: true,
+                        strokeWidth: isFocused ? 4 : 0,
+                        strokeColor: "#0a0b10"
+                    }
+                };
+            });
+
+            const updatedEdges = styledEdges.map(edge => {
+                const edgeIdStr = String(edge.id);
+                const isFocused = targetEdgeIds.has(edgeIdStr);
+                return {
+                    id: edge.id,
+                    color: isFocused ? { color: "#00e5ff", highlight: "#00e5ff" } : { color: "rgba(255, 255, 255, 0.03)" },
+                    width: isFocused ? 4 : 1,
+                    font: {
+                        color: isFocused ? "#80f2ff" : "transparent",
+                        size: isFocused ? 12 : 0,
+                        face: "Outfit",
+                        background: isFocused ? "#101324" : "transparent"
+                    }
+                };
+            });
+
+            nodesDataSet.update(updatedNodes);
+            edgesDataSet.update(updatedEdges);
+        }
+
+        function resetSpotlightFocus() {
+            nodesDataSet.update(styledNodes);
+            edgesDataSet.update(styledEdges);
+        }
+
+        // Setup Hover and Select Events
         networkInstance.on("hoverEdge", (params) => {
             const edgeId = params.edge;
             const edgeData = edgesDataSet.get(edgeId);
@@ -539,10 +671,25 @@ function renderNetwork(nodesArray, edgesArray) {
         networkInstance.on("selectEdge", (params) => {
             const edgeId = params.edges[0];
             if (edgeId) {
+                applySpotlightFocus(edgeId, null);
                 const edgeData = edgesDataSet.get(edgeId);
                 if (edgeData && edgeData.context) {
                     showGraphInfoBox(edgeData);
                 }
+            }
+        });
+
+        networkInstance.on("selectNode", (params) => {
+            const nodeId = params.nodes[0];
+            if (nodeId) {
+                applySpotlightFocus(null, nodeId);
+            }
+        });
+
+        networkInstance.on("click", (params) => {
+            if (params.nodes.length === 0 && params.edges.length === 0) {
+                resetSpotlightFocus();
+                hideGraphInfoBox();
             }
         });
     } catch (err) {
@@ -557,16 +704,20 @@ function renderNetwork(nodesArray, edgesArray) {
     }
 
     if (nodesArray.length > 10) {
-        // Freeze physics once stabilization completes to prevent continuous lag (only for larger networks)
-        networkInstance.on("stabilizationFinished", function () {
+        const disablePhysicsCallback = function () {
             console.log("Graph stabilization finished. Node count:", nodesArray.length);
-            networkInstance.setOptions({ physics: { enabled: false } });
+            if (networkInstance) {
+                networkInstance.setOptions({ physics: { enabled: false } });
+            }
             physicsEnabled = false;
             if (togglePhysicsBtn) {
                 togglePhysicsBtn.classList.remove("active");
             }
             console.log("Physics disabled to prevent performance lag on large graph.");
-        });
+        };
+
+        networkInstance.on("stabilized", disablePhysicsCallback);
+        networkInstance.on("stabilizationIterationsDone", disablePhysicsCallback);
     } else {
         physicsEnabled = false;
         if (togglePhysicsBtn) {
@@ -786,7 +937,7 @@ async function handlePathfinderSubmit(e) {
     findPathBtn.disabled = true;
 
     try {
-        const response = await fetch(`/api/path?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}`);
+        const response = await fetch(`/api/path?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}&org=${encodeURIComponent(activeWorkspace)}`);
         if (!response.ok) {
             const err = await response.json();
             throw new Error(err.detail || "Failed to find shortest path.");
@@ -849,6 +1000,14 @@ function showPathNarrative(nodes, edges, sourceName, targetName) {
         textEl.innerHTML = getFriendlyRelationText(step);
         stepEl.appendChild(textEl);
 
+        if (step.affected_companies && step.affected_companies.length > 0) {
+            const compEl = document.createElement("div");
+            compEl.className = "explanation-affected-companies";
+            compEl.innerHTML = `<i class="fa-solid fa-building-circle-exclamation"></i> <strong>Affected Companies:</strong> ` +
+                step.affected_companies.map(c => `<span class="company-tag">${c}</span>`).join(" ");
+            stepEl.appendChild(compEl);
+        }
+
         if (step.full_context) {
             const contextEl = document.createElement("div");
             contextEl.className = "explanation-context";
@@ -905,13 +1064,16 @@ function reconstructPathSteps(nodesArray, edgesArray, sourceName, targetName) {
             break;
         }
 
+        const comps = nextEdge.affected_companies || nextNode.affected_companies || currentNode.affected_companies || [];
+
         steps.push({
             from: currentNode,
             to: nextNode,
             relation: nextEdge.label,
             direction: direction,
             context: nextEdge.context || "",
-            full_context: nextEdge.full_context || ""
+            full_context: nextEdge.full_context || "",
+            affected_companies: comps
         });
 
         visitedNodeIds.add(nextNode.id);
@@ -969,13 +1131,16 @@ function renderConnectionsTable(nodes, edges) {
         return;
     }
 
+    const maxRows = 100;
+    const displayEdges = edges.slice(0, maxRows);
+
     // Create a lookup map for node data
     const nodeMap = new Map();
     nodes.forEach(node => {
         nodeMap.set(node.id, node);
     });
 
-    edges.forEach(edge => {
+    displayEdges.forEach(edge => {
         const sourceNode = nodeMap.get(edge.from);
         const targetNode = nodeMap.get(edge.to);
 
@@ -1003,6 +1168,12 @@ function renderConnectionsTable(nodes, edges) {
 
         connectionsTableBody.appendChild(row);
     });
+
+    if (edges.length > maxRows) {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td colspan="3" class="empty-state" style="font-size: 0.85rem; color: var(--text-muted);">... and ${edges.length - maxRows} more connections</td>`;
+        connectionsTableBody.appendChild(row);
+    }
 }
 
 // Open modal containing table lists of entities
@@ -1163,6 +1334,9 @@ function populatePathfinderSelects(nodes) {
 
     const targetExists = nodes.some(n => n.label === prevTarget);
     if (targetExists) pathTargetSelect.value = prevTarget;
+
+    refreshCustomSelect(pathSourceSelect);
+    refreshCustomSelect(pathTargetSelect);
 }
 
 // Show details inside the floating graph overlay box on hover/select
@@ -1305,5 +1479,182 @@ function getSentimentClass(sentiment) {
     if (sent === "positive") return "badge-positive";
     if (sent === "negative") return "badge-negative";
     return "badge-neutral";
+}
+
+// Universal Custom Select Component Builder with Search Support (Bypasses Windows Native White Popups)
+function initCustomSelect(selectEl) {
+    if (!selectEl) return;
+    
+    if (selectEl.dataset.customInitialized) {
+        refreshCustomSelect(selectEl);
+        return;
+    }
+    selectEl.dataset.customInitialized = "true";
+
+    const parent = selectEl.parentElement;
+    if (parent) {
+        parent.classList.add("custom-active-wrapper");
+    }
+
+    selectEl.style.setProperty("display", "none", "important");
+    selectEl.style.setProperty("pointer-events", "none", "important");
+    selectEl.tabIndex = -1;
+
+    const isLimit = selectEl.id === "graphLimitSelect";
+    const isPathfinder = selectEl.classList.contains("pathfinder-select");
+
+    const container = document.createElement("div");
+    container.className = `custom-select-container ${isLimit ? "limit-dropdown" : ""} ${isPathfinder ? "pathfinder-dropdown" : ""}`;
+    container.id = `${selectEl.id}_customContainer`;
+
+    const trigger = document.createElement("div");
+    trigger.className = "custom-select-trigger";
+    
+    const iconI = parent ? parent.querySelector("i") : null;
+    let iconHtml = "";
+    if (iconI && iconI.parentElement === parent) {
+        iconHtml = iconI.outerHTML;
+        iconI.style.display = "none";
+    }
+
+    trigger.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden; width: 100%;">
+            ${iconHtml}
+            <span class="trigger-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+        </div>
+        <i class="fa-solid fa-chevron-down chevron"></i>
+    `;
+
+    const optionsMenu = document.createElement("div");
+    optionsMenu.className = "custom-select-options";
+
+    // Sticky search box for Pathfinder selects
+    let searchInput = null;
+    if (isPathfinder) {
+        const searchBox = document.createElement("div");
+        searchBox.className = "custom-select-search";
+        searchBox.innerHTML = `
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" class="custom-search-input" placeholder="Search entity..." autocomplete="off">
+        `;
+        searchInput = searchBox.querySelector("input");
+        searchBox.addEventListener("click", (e) => e.stopPropagation());
+        
+        searchInput.addEventListener("input", (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const optionItems = optionsListContainer.querySelectorAll(".custom-option");
+            let hasVisible = false;
+
+            optionItems.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                if (!query || text.includes(query)) {
+                    item.style.display = "flex";
+                    hasVisible = true;
+                } else {
+                    item.style.display = "none";
+                }
+            });
+
+            let noRes = optionsListContainer.querySelector(".custom-no-results");
+            if (!hasVisible) {
+                if (!noRes) {
+                    noRes = document.createElement("div");
+                    noRes.className = "custom-no-results";
+                    noRes.textContent = "No entities found";
+                    optionsListContainer.appendChild(noRes);
+                }
+                noRes.style.display = "block";
+            } else if (noRes) {
+                noRes.style.display = "none";
+            }
+        });
+
+        optionsMenu.appendChild(searchBox);
+    }
+
+    const optionsListContainer = document.createElement("div");
+    optionsListContainer.className = "custom-options-list";
+    optionsMenu.appendChild(optionsListContainer);
+
+    container.appendChild(trigger);
+    container.appendChild(optionsMenu);
+
+    if (parent) {
+        parent.appendChild(container);
+    }
+
+    trigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const isOpen = container.classList.contains("open");
+        document.querySelectorAll(".custom-select-container.open").forEach(c => {
+            c.classList.remove("open");
+            if (c.parentElement) c.parentElement.style.zIndex = "";
+        });
+
+        if (!isOpen) {
+            container.classList.add("open");
+            if (parent) parent.style.zIndex = "100000";
+        } else {
+            if (parent) parent.style.zIndex = "";
+        }
+
+        if (!isOpen && searchInput) {
+            setTimeout(() => {
+                searchInput.value = "";
+                searchInput.dispatchEvent(new Event("input"));
+                searchInput.focus();
+            }, 50);
+        }
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!container.contains(e.target)) {
+            container.classList.remove("open");
+            if (parent) parent.style.zIndex = "";
+        }
+    });
+
+    function syncOptions() {
+        optionsListContainer.innerHTML = "";
+        const triggerText = trigger.querySelector(".trigger-text");
+        
+        const selectedOpt = selectEl.options[selectEl.selectedIndex] || selectEl.options[0];
+        if (triggerText && selectedOpt) {
+            triggerText.textContent = selectedOpt.textContent;
+        }
+
+        Array.from(selectEl.options).forEach((opt, idx) => {
+            if (opt.disabled && !opt.value) return;
+
+            const item = document.createElement("div");
+            item.className = `custom-option ${opt.selected ? "selected" : ""}`;
+            item.textContent = opt.textContent;
+
+            item.addEventListener("click", (e) => {
+                e.stopPropagation();
+                selectEl.selectedIndex = idx;
+                selectEl.value = opt.value;
+                if (triggerText) triggerText.textContent = opt.textContent;
+                
+                optionsListContainer.querySelectorAll(".custom-option").forEach(o => o.classList.remove("selected"));
+                item.classList.add("selected");
+                
+                container.classList.remove("open");
+                selectEl.dispatchEvent(new Event("change"));
+            });
+
+            optionsListContainer.appendChild(item);
+        });
+    }
+
+    syncOptions();
+    selectEl._syncCustomOptions = syncOptions;
+}
+
+function refreshCustomSelect(selectEl) {
+    if (selectEl && typeof selectEl._syncCustomOptions === "function") {
+        selectEl._syncCustomOptions();
+    }
 }
 

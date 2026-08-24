@@ -37,9 +37,13 @@ def get_recent(org: str = Query(..., description="Organization workspace name"))
         handle_db_exception(e)
 
 @router.get("/graph")
-def get_graph(org: str = Query(..., description="Organization workspace name")):
+def get_graph(
+    org: str = Query(..., description="Organization workspace name"),
+    limit: int = Query(30, ge=1, le=200, description="Max articles to fetch in graph view"),
+    include_time_tree: bool = Query(False, description="Include time hierarchy tree nodes")
+):
     try:
-        graph_data = db.get_graph_data(org)
+        graph_data = db.get_graph_data(org, limit=limit, include_time_tree=include_time_tree)
         return graph_data
     except Exception as e:
         handle_db_exception(e)
@@ -53,5 +57,15 @@ def get_shortest_path(
     try:
         path_data = db.get_shortest_path(source, target, org)
         return path_data
+    except Exception as e:
+        handle_db_exception(e)
+
+@router.post("/consolidate")
+def consolidate_workspace_entities(
+    org: str = Query("Default", description="Organization workspace name")
+):
+    try:
+        res = db.deduplicate_entities(org)
+        return res
     except Exception as e:
         handle_db_exception(e)
