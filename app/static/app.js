@@ -133,6 +133,25 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    const vacuumDbBtn = document.getElementById("vacuumDbBtn");
+    if (vacuumDbBtn) {
+        vacuumDbBtn.addEventListener("click", async () => {
+            vacuumDbBtn.disabled = true;
+            vacuumDbBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vacuuming...';
+            try {
+                const res = await fetch(`/api/vacuum?org=${encodeURIComponent(activeWorkspace)}`, { method: "POST" });
+                const data = await res.json();
+                console.log("Database Vacuum Response:", data);
+                await updateDashboardData();
+            } catch (err) {
+                console.error("Database Vacuum Failed:", err);
+            } finally {
+                vacuumDbBtn.disabled = false;
+                vacuumDbBtn.innerHTML = '<i class="fa-solid fa-broom"></i> Vacuum DB';
+            }
+        });
+    }
+
     const graphLimitSelect = document.getElementById("graphLimitSelect");
     if (graphLimitSelect) {
         graphLimitSelect.addEventListener("change", (e) => {

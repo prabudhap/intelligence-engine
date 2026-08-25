@@ -30,3 +30,10 @@ class DatabaseRepository:
 
     def deduplicate_entities(self, org_name: str) -> dict:
         return queries.deduplicate_database_entities(self, org_name)
+
+    def vacuum_database(self, org_name: str = "Default", prune_cooccurrences: bool = False, min_cooccurrence_weight: int = 1) -> dict:
+        return queries.vacuum_database(self, org_name, prune_cooccurrences=prune_cooccurrences, min_cooccurrence_weight=min_cooccurrence_weight)
+
+    def get_space_stats(self, org_name: str = "Default") -> dict:
+        return queries.get_database_space_stats(self, org_name)
+

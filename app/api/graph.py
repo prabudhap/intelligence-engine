@@ -69,3 +69,25 @@ def consolidate_workspace_entities(
         return res
     except Exception as e:
         handle_db_exception(e)
+
+@router.post("/vacuum")
+def vacuum_database(
+    org: str = Query("Default", description="Organization workspace name"),
+    prune_cooccurrences: bool = Query(False, description="Whether to prune 1-off transient co-occurrence edges")
+):
+    try:
+        res = db.vacuum_database(org, prune_cooccurrences=prune_cooccurrences)
+        return res
+    except Exception as e:
+        handle_db_exception(e)
+
+@router.get("/space-stats")
+def get_space_stats(
+    org: str = Query("Default", description="Organization workspace name")
+):
+    try:
+        stats = db.get_space_stats(org)
+        return stats
+    except Exception as e:
+        handle_db_exception(e)
+
