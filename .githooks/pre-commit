@@ -1,0 +1,30 @@
+#!/bin/sh
+# Pre-commit hook to verify test suite passes before committing changes.
+
+echo "=========================================="
+echo "🧪 Running Intelligence Engine Automated Tests..."
+echo "=========================================="
+
+if [ -f ".venv/Scripts/python.exe" ]; then
+    PYTHON_CMD=".venv/Scripts/python.exe"
+elif [ -f ".venv/bin/python" ]; then
+    PYTHON_CMD=".venv/bin/python"
+else
+    PYTHON_CMD="python"
+fi
+
+$PYTHON_CMD -m pytest --quiet
+
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+    echo ""
+    echo "❌ PRE-COMMIT FAILURE: Pytest suite failed!"
+    echo "Please fix the failing tests before committing."
+    echo "=========================================="
+    exit 1
+else
+    echo "✅ All tests passed cleanly! Proceeding with commit..."
+    echo "=========================================="
+    exit 0
+fi
