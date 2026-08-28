@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from app.database import db
+from app.api.auth import verify_api_key
 
 router = APIRouter(prefix="/api")
 
@@ -60,7 +61,7 @@ def get_shortest_path(
     except Exception as e:
         handle_db_exception(e)
 
-@router.post("/consolidate")
+@router.post("/consolidate", dependencies=[Depends(verify_api_key)])
 def consolidate_workspace_entities(
     org: str = Query("Default", description="Organization workspace name")
 ):
@@ -70,7 +71,7 @@ def consolidate_workspace_entities(
     except Exception as e:
         handle_db_exception(e)
 
-@router.post("/vacuum")
+@router.post("/vacuum", dependencies=[Depends(verify_api_key)])
 def vacuum_database(
     org: str = Query("Default", description="Organization workspace name"),
     prune_cooccurrences: bool = Query(False, description="Whether to prune 1-off transient co-occurrence edges")

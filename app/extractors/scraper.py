@@ -1,5 +1,8 @@
-import random
+import ipaddress
 import json
+import random
+import socket
+from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 
@@ -13,11 +16,76 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 ]
 
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB max download size limit
+
+BLOCKED_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+def validate_url_safety(url: str) -> None:
+    """
+    Validates URL scheme and resolves hostname IP to prevent Server-Side Request Forgery (SSRF)
+    targeting private internal networks, loopback addresses, or cloud metadata endpoints.
+    """
+    if not url or not isinstance(url, str):
+        raise ValueError("Invalid URL: URL must be a non-empty string.")
+
+    parsed = urlparse(url.strip())
+    if parsed.scheme.lower() not in ("http", "https"):
+        raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https URLs are allowed.")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Invalid URL: Hostname could not be resolved.")
+
+    try:
+        ip_info = socket.getaddrinfo(hostname, None)
+        for family, socktype, proto, canonname, sockaddr in ip_info:
+            ip_str = sockaddr[0]
+            ip_obj = ipaddress.ip_address(ip_str)
+            for blocked in BLOCKED_NETWORKS:
+                if ip_obj in blocked:
+                    raise ValueError(f"Access to private/internal IP address '{ip_str}' is forbidden for security.")
+    except socket.gaierror as e:
+        raise ValueError(f"Could not resolve hostname '{hostname}': {e}")
+
+def fetch_url_content_safely(url: str, headers: dict, timeout: float = 10.0) -> str:
+    """
+    Fetches URL content safely enforcing SSRF checks, max byte limits, and timeouts.
+    """
+    validate_url_safety(url)
+
+    with httpx.Client(headers=headers, follow_redirects=True, timeout=timeout) as client:
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) > MAX_RESPONSE_BYTES:
+                raise ValueError(f"Response size exceeds maximum allowed limit ({MAX_RESPONSE_BYTES // (1024*1024)}MB).")
+
+            downloaded_bytes = bytearray()
+            for chunk in response.iter_bytes(chunk_size=8192):
+                downloaded_bytes.extend(chunk)
+                if len(downloaded_bytes) > MAX_RESPONSE_BYTES:
+                    raise ValueError(f"Download size exceeded maximum allowed limit ({MAX_RESPONSE_BYTES // (1024*1024)}MB).")
+
+            return downloaded_bytes.decode(response.encoding or "utf-8", errors="replace")
+
 def resolve_google_news_url(url: str, user_agent: str) -> str:
     """
     Resolves the original publisher URL from a Google News redirect URL.
     """
     try:
+        validate_url_safety(url)
         with httpx.Client(headers={"User-Agent": user_agent}, follow_redirects=True, timeout=10.0) as client:
             resp = client.get(url)
             resp.raise_for_status()
@@ -115,6 +183,7 @@ def _extract_article_body(soup: BeautifulSoup, max_length: int = 15000) -> str:
 def scrape_article(url: str) -> dict:
     """
     Fetches an article URL, parses the HTML, and returns the title and body text.
+    Enforces SSRF domain validation and response byte streaming limits.
     """
     user_agent = random.choice(USER_AGENTS)
     headers = {
@@ -131,10 +200,7 @@ def scrape_article(url: str) -> dict:
     logger.info(f"🕸️ Attempting to scrape URL: {url}")
     
     try:
-        with httpx.Client(headers=headers, follow_redirects=True, timeout=10.0) as client:
-            response = client.get(url)
-            response.raise_for_status()
-            html_content = response.text
+        html_content = fetch_url_content_safely(url, headers=headers, timeout=10.0)
     except Exception as e:
         logger.error(f"❌ Failed to fetch URL {url}: {e}")
         raise ValueError(f"Failed to fetch content from URL: {e}")

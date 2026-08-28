@@ -50,9 +50,12 @@ def classify_topic(text: str) -> str:
             
     return best_category
 
+WORD_TOKEN_RE = re.compile(r'\b[a-z]+\b')
+
 def analyze_sentiment(text: str) -> str:
     """
     Performs a lightweight lexicon-based sentiment analysis on the text.
+    Uses pre-compiled regex tokenizer for high-speed evaluation.
     """
     text_lower = text.lower()
     
@@ -75,7 +78,7 @@ def analyze_sentiment(text: str) -> str:
         'damage', 'hurt', 'harm'
     }
     
-    words = re.findall(r'\b[a-z]+\b', text_lower)
+    words = WORD_TOKEN_RE.findall(text_lower)
     
     pos_count = sum(1 for w in words if w in positive_words)
     neg_count = sum(1 for w in words if w in negative_words)

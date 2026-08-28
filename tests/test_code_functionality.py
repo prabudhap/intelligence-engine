@@ -24,18 +24,18 @@ class TestHTMLScraperFunctionality:
             </body>
         </html>
         """
-        with patch("httpx.Client.get") as mock_get:
-            mock_resp = MagicMock()
-            mock_resp.text = sample_html
-            mock_resp.raise_for_status.return_value = None
-            mock_get.return_value = mock_resp
-
+        with patch("app.extractors.scraper.fetch_url_content_safely") as mock_fetch:
+            mock_fetch.return_value = sample_html
             result = scrape_article("https://example.com/test-article")
 
             assert result["title"] == "Tesla Launches New Cybercab in Austin"
             assert "Tesla announced its new autonomous Cybercab" in result["body"]
             assert "Elon Musk presented" in result["body"]
             assert "Home Menu" not in result["body"] # header element decomposed
+
+    def test_scrape_article_ssrf_blocking(self):
+        with pytest.raises(ValueError, match="Access to private/internal IP address"):
+            scrape_article("http://127.0.0.1:8000/internal-data")
 
 class TestNLPClassificationFunctionality:
     def test_classify_topic_technology(self):

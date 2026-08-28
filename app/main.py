@@ -44,7 +44,19 @@ async def lifespan(app: FastAPI):
     bg_executor.shutdown(wait=False)
     db.close()
 
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import ALLOWED_ORIGINS
+
 app = FastAPI(title="OSINT Dockerized Intelligence Engine API", lifespan=lifespan)
+
+# CORS Policy Middleware Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # Include Routers
 app.include_router(graph_router)

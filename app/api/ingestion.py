@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.core import logger, bg_executor
@@ -7,6 +7,7 @@ from app.nlp import extract_entities
 from app.extractors.scraper import scrape_article
 from app.extractors.google_news import run_google_news_ingestion
 from app.extractors.enrichment import run_web_enrichment
+from app.api.auth import verify_api_key
 
 router = APIRouter()
 
@@ -56,12 +57,12 @@ def process_scrape(payload: ScrapeInput, background_tasks: BackgroundTasks):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/process-news")
+@router.post("/process-news", dependencies=[Depends(verify_api_key)])
 def process_news(article: ArticleInput, background_tasks: BackgroundTasks):
     background_tasks.add_task(pipeline_worker, article.org, article.title, article.body)
     return {"status": "queued", "message": "Article layout extraction started inside Docker."}
 
-@router.post("/api/cron/google-news")
+@router.post("/api/cron/google-news", dependencies=[Depends(verify_api_key)])
 def trigger_google_news(background_tasks: BackgroundTasks):
     try:
         background_tasks.add_task(run_google_news_ingestion)

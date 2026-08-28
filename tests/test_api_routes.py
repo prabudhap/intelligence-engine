@@ -73,3 +73,27 @@ class TestAPIRoutes:
         response = client.get("/api/organizations")
         assert response.status_code == 503
         assert "Neo4j database is offline" in response.json()["detail"]
+
+    def test_cors_policy_headers(self, client):
+        response = client.options(
+            "/api/organizations",
+            headers={
+                "Origin": "http://localhost:8000",
+                "Access-Control-Request-Method": "GET"
+            }
+        )
+        assert response.status_code == 200
+        assert "access-control-allow-origin" in response.headers
+
+    def test_api_key_auth_protection(self, client, monkeypatch):
+        monkeypatch.setattr("app.api.auth.API_SECRET_KEY", "test_secret_123")
+        monkeypatch.setattr("app.core.config.API_SECRET_KEY", "test_secret_123")
+
+        # Request without header should be rejected
+        unauth_resp = client.post("/api/vacuum?org=Default")
+        assert unauth_resp.status_code == 401
+        assert "Unauthorized" in unauth_resp.json()["detail"]
+
+        # Request with valid header should pass
+        auth_resp = client.post("/api/vacuum?org=Default", headers={"X-API-Key": "test_secret_123"})
+        assert auth_resp.status_code == 200

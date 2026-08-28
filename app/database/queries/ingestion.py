@@ -142,16 +142,22 @@ def _cypher_transaction(tx: Any, org_name: str, title: str, entities: dict, body
            location_relationships=location_relationships,
            co_occurrences=co_occurrences)
 
+ALLOWED_ENTITY_LABELS = {"Person", "Company", "Location"}
+
 def deduplicate_database_entities(repo, org_name: str) -> dict:
     """
     Scans existing entity nodes in Neo4j for the workspace and merges duplicate alias nodes
     (e.g., merging (:Person {name: 'Elon'}) into (:Person {name: 'Elon Musk'})).
+    Enforces strict label whitelisting to prevent Cypher injection.
     """
     merged_count = 0
     with repo.get_session() as session:
         def _tx(tx):
             nonlocal merged_count
             for label_name in ["Person", "Company", "Location"]:
+                if label_name not in ALLOWED_ENTITY_LABELS:
+                    raise ValueError(f"Unauthorized Cypher entity label: {label_name}")
+
                 res = tx.run(f"""
                     MATCH (o:Organization {{name: $org_name}})
                     MATCH (a:Article)-[:UNDER_WORKSPACE]->(o)
