@@ -31,6 +31,17 @@ class Database(DatabaseRepository):
             finally:
                 self.driver = None
 
+    def _execute_ddl(self, session, primary_cypher: str, fallback_cypher: str, name: str):
+        """Executes a DDL statement with Neo4j 5 syntax and fallback to legacy Neo4j 4.x syntax."""
+        try:
+            session.run(cast(LiteralString, primary_cypher))
+        except Exception as e:
+            logger.warning(f"Neo4j 5 DDL execution failed for {name}: {e}. Retrying with legacy syntax...")
+            try:
+                session.run(cast(LiteralString, fallback_cypher))
+            except Exception as e2:
+                logger.error(f"Legacy DDL fallback failed for {name}: {e2}")
+
     def setup_constraints(self):
         try:
             with self.get_session() as session:
@@ -51,35 +62,27 @@ class Database(DatabaseRepository):
             ("day_id_unique", "Day", "id"),
             ("timeperiod_id_unique", "TimePeriod", "id"),
         ]
+        
         try:
             with self.get_session() as session:
                 for c_name, label, prop in constraints:
-                    try:
-                        # Execute write transaction for constraints setup (Neo4j 5 syntax)
-                        session.run(cast(LiteralString, f"CREATE CONSTRAINT {c_name} IF NOT EXISTS FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE"))
-                    except Exception as e:
-                        logger.warning(f"Failed to create constraint {c_name} using Neo4j 5 syntax: {e}. Retrying with legacy syntax...")
-                        try:
-                            # Legacy Neo4j 4.x syntax fallback
-                            session.run(cast(LiteralString, f"CREATE CONSTRAINT {c_name} IF NOT EXISTS ON (n:{label}) ASSERT n.{prop} IS UNIQUE"))
-                        except Exception as e2:
-                            logger.error(f"Fallback constraint creation failed: {e2}")
+                    p_query = f"CREATE CONSTRAINT {c_name} IF NOT EXISTS FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE"
+                    f_query = f"CREATE CONSTRAINT {c_name} IF NOT EXISTS ON (n:{label}) ASSERT n.{prop} IS UNIQUE"
+                    self._execute_ddl(session, p_query, f_query, c_name)
+                    
+                # Indexes
+                self._execute_ddl(
+                    session,
+                    "CREATE INDEX article_created_at_idx IF NOT EXISTS FOR (a:Article) ON (a.created_at)",
+                    "CREATE INDEX article_created_at_idx IF NOT EXISTS ON :Article(created_at)",
+                    "article_created_at_idx"
+                )
+                self._execute_ddl(
+                    session,
+                    "CREATE INDEX article_url_idx IF NOT EXISTS FOR (a:Article) ON (a.url)",
+                    "CREATE INDEX article_url_idx IF NOT EXISTS ON :Article(url)",
+                    "article_url_idx"
+                )
         except Exception as e:
-            logger.warning(f"Error during constraint creation loop: {e}")
-
-        # Range indexes for Article.created_at and Article.url
-        try:
-            with self.get_session() as session:
-                try:
-                    session.run("CREATE INDEX article_created_at_idx IF NOT EXISTS FOR (a:Article) ON (a.created_at)")
-                    session.run("CREATE INDEX article_url_idx IF NOT EXISTS FOR (a:Article) ON (a.url)")
-                except Exception as e:
-                    # Legacy Neo4j 4.x index creation fallback
-                    try:
-                        session.run("CREATE INDEX article_created_at_idx IF NOT EXISTS ON :Article(created_at)")
-                        session.run("CREATE INDEX article_url_idx IF NOT EXISTS ON :Article(url)")
-                    except Exception as e2:
-                        logger.error(f"Fallback index creation failed: {e2}")
-        except Exception as e:
-            logger.warning(f"Error during index creation: {e}")
+            logger.warning(f"Error during database DDL initialization: {e}")
 

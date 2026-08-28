@@ -42,6 +42,9 @@ def mock_db(monkeypatch):
         "co_occurrences_count": 8,
         "orphan_entities_count": 1
     }
+    mock_repo.get_company_related_articles.return_value = [
+        {"title": "Test Article", "sentiment": "Positive", "url": "https://example.com"}
+    ]
     return mock_repo
 
 @pytest.fixture

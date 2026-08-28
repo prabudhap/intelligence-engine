@@ -35,6 +35,19 @@ def get_stats(repo, org_name: str) -> dict:
     with repo.get_session() as session:
         return session.execute_read(_tx)
 
+def _parse_article_records(result) -> list:
+    """Formats Neo4j article query records into a standardized dictionary representation."""
+    return [
+        {
+            "title": record.get("title"),
+            "created_at": record.get("created_at") or 0,
+            "category": record.get("category") or "General",
+            "sentiment": record.get("sentiment") or "Neutral",
+            "url": record.get("url")
+        }
+        for record in result
+    ]
+
 def get_recent_articles(repo, org_name: str) -> list:
     """Retrieves 20 most recent ingested articles for a workspace."""
     def _tx(tx):
@@ -43,16 +56,24 @@ def get_recent_articles(repo, org_name: str) -> list:
             RETURN a.title AS title, a.created_at AS created_at, a.category AS category, a.sentiment AS sentiment, a.url AS url
             ORDER BY a.created_at DESC LIMIT 20
         """, org_name=org_name)
-        articles = []
-        for record in result:
-            articles.append({
-                "title": record.get("title"),
-                "created_at": record.get("created_at") or 0,
-                "category": record.get("category") or "General",
-                "sentiment": record.get("sentiment") or "Neutral",
-                "url": record.get("url")
-            })
-        return articles
+        return _parse_article_records(result)
 
     with repo.get_session() as session:
         return session.execute_read(_tx)
+
+def get_company_related_articles(repo, company_name: str, org_name: str = "Default") -> list:
+    """Retrieves articles related to a specific company/organization node in a workspace."""
+    def _tx(tx):
+        result = tx.run("""
+            MATCH (o:Organization {name: $org_name})
+            MATCH (a:Article)-[:UNDER_WORKSPACE]->(o)
+            MATCH (c)-[:MENTIONED_IN]->(a)
+            WHERE (c:Company OR c:Organization OR c:Person) AND (c.name = $company_name OR c.title = $company_name)
+            RETURN a.title AS title, a.created_at AS created_at, a.category AS category, a.sentiment AS sentiment, a.url AS url
+            ORDER BY a.created_at DESC LIMIT 10
+        """, org_name=org_name, company_name=company_name)
+        return _parse_article_records(result)
+
+    with repo.get_session() as session:
+        return session.execute_read(_tx)
+

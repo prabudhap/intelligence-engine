@@ -60,6 +60,14 @@ class TestAPIRoutes:
         assert "total_nodes" in data
         assert data["total_nodes"] == 15
 
+    def test_get_company_financials(self, client):
+        response = client.get("/api/company-financials?company=Tesla&org=Default")
+        assert response.status_code == 200
+        data = response.json()
+        assert "stock_quote" in data
+        assert "sentiment_summary" in data
+        assert "articles" in data
+
     def test_database_offline_error_handling(self, client, mock_db):
         mock_db.get_organizations.side_effect = Exception("Failed to connect to bolt://localhost:7687: Connection refused")
         response = client.get("/api/organizations")

@@ -5,6 +5,7 @@ from app.nlp.classification import classify_topic, analyze_sentiment
 from app.nlp import extract_entities
 from app.database.queries.graph import get_graph_data
 from app.database.queries.pathfinder import get_shortest_path
+from app.services.stock_service import resolve_ticker_symbol, fetch_stock_quote
 
 class TestHTMLScraperFunctionality:
     def test_scrape_article_html_parsing(self):
@@ -155,3 +156,42 @@ class TestGraphQueriesFunctionality:
         assert "nodes" in path
         assert "edges" in path
         assert "affected_companies" in path
+
+class TestStockServiceFunctionality:
+    def test_resolve_ticker_symbol(self):
+        assert resolve_ticker_symbol("Tesla Inc.") == "TSLA"
+        assert resolve_ticker_symbol("Apple LLC") == "AAPL"
+        assert resolve_ticker_symbol("Microsoft Corp.") == "MSFT"
+        assert resolve_ticker_symbol("Google") == "GOOGL"
+
+    def test_fetch_stock_quote_unlisted(self):
+        result = fetch_stock_quote("NonExistentPrivateCompany12345")
+        assert result["is_public"] is False
+        assert result["ticker"] is None
+
+    @patch("httpx.Client.get")
+    def test_fetch_stock_quote_mocked_price(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "chart": {
+                "result": [{
+                    "meta": {
+                        "regularMarketPrice": 220.50,
+                        "previousClose": 215.00,
+                        "currency": "USD"
+                    }
+                }]
+            }
+        }
+        mock_get.return_value = mock_resp
+
+        quote = fetch_stock_quote("Tesla")
+        assert quote["is_public"] is True
+        assert quote["ticker"] == "TSLA"
+        assert quote["current_price"] == 220.50
+        assert quote["change_amount"] == 5.50
+        assert quote["currency"] == "USD"
+        assert quote["is_up"] is True
+        assert "$220.50" in quote["formatted_price"]
+

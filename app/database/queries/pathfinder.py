@@ -1,5 +1,15 @@
 from app.database.temporal import extract_context_from_bodies
 
+def _resolve_node_info(node) -> dict:
+    """Extracts node ID, display label, and primary group label from a Neo4j node object."""
+    label = list(node.labels)[0] if getattr(node, "labels", None) else "Unknown"
+    title = node.get("title") or node.get("name") or node.get("id") or node.get("value") or "Unnamed"
+    return {
+        "id": node.element_id,
+        "label": str(title),
+        "group": label
+    }
+
 def get_shortest_path(repo, source_name: str, target_name: str, org_name: str = "Default") -> dict:
     """Calculates shortest path between two entities and extracts contextual narrative evidence."""
     if source_name == target_name:
@@ -20,15 +30,8 @@ def get_shortest_path(repo, source_name: str, target_name: str, org_name: str = 
             record = session.execute_read(_tx_single)
             if not record or not record.get("node"):
                 return {"nodes": [], "edges": []}
-            node = record.get("node")
-            label = list(node.labels)[0] if node.labels else "Unknown"
-            title = node.get("title") or node.get("name") or node.get("id") or node.get("value") or "Unnamed"
             return {
-                "nodes": [{
-                    "id": node.element_id,
-                    "label": str(title),
-                    "group": label
-                }],
+                "nodes": [_resolve_node_info(record.get("node"))],
                 "edges": []
             }
 
@@ -101,14 +104,7 @@ def get_shortest_path(repo, source_name: str, target_name: str, org_name: str = 
         
         for node in path.nodes:
             if node.element_id not in seen_nodes:
-                label = list(node.labels)[0] if node.labels else "Unknown"
-                title = node.get("title") or node.get("name") or node.get("id") or node.get("value") or "Unnamed"
-                node_item = {
-                    "id": node.element_id,
-                    "label": str(title),
-                    "group": label
-                }
-                nodes.append(node_item)
+                nodes.append(_resolve_node_info(node))
                 seen_nodes.add(node.element_id)
             
         for rel in path.relationships:

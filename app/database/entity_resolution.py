@@ -1,17 +1,17 @@
+import json
 import re
+from pathlib import Path
 
-# Standard acronym and entity alias mapping dictionary
-ACRONYM_MAP = {
-    "US": "United States",
-    "U.S.": "United States",
-    "USA": "United States",
-    "U.S.A.": "United States",
-    "UK": "United Kingdom",
-    "U.K.": "United Kingdom",
-    "EU": "European Union",
-    "UN": "United Nations",
-    "U.N.": "United Nations"
-}
+def load_acronym_map(file_path: str | Path | None = None) -> dict[str, str]:
+    """Loads acronym mapping dictionary from a JSON resource file."""
+    path = Path(file_path) if file_path else Path(__file__).parent.parent / "resources" / "acronym_map.json"
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+ACRONYM_MAP = load_acronym_map()
+
 
 def normalize_name(name: str) -> str:
     """Cleans whitespace, trailing quotes/commas, and normalizes standard acronyms."""
@@ -38,7 +38,7 @@ def build_entity_alias_map(labels: list[str]) -> dict[str, str]:
         "Tesla Inc": "Tesla Inc"
     }
     """
-    cleaned_unique = list(set([normalize_name(l) for l in labels if l and l.strip()]))
+    cleaned_unique = list(set([normalize_name(l) for l in labels if l and isinstance(l, str) and l.strip()]))
     # Sort longest name first so full descriptive names become canonical targets
     sorted_names = sorted(cleaned_unique, key=lambda x: len(x), reverse=True)
 
@@ -65,6 +65,9 @@ def build_entity_alias_map(labels: list[str]) -> dict[str, str]:
     # Also map uncleaned raw labels
     result = {}
     for raw in labels:
+        if not raw:
+            result[raw] = ""
+            continue
         norm = normalize_name(raw)
         result[raw] = mapping.get(norm, norm if norm else raw)
 
@@ -85,7 +88,7 @@ def consolidate_graph(nodes: list[dict], edges: list[dict]) -> tuple[list[dict],
         node_by_id[n["id"]] = n
         grp = n.get("group")
         if grp in ("Person", "Company", "Location"):
-            group_labels.setdefault(grp, []).append(n.get("label", ""))
+            group_labels.setdefault(grp, []).append(n.get("label") or "")
 
     # Build canonical name mappings per group
     label_to_canonical = {}
@@ -100,10 +103,10 @@ def consolidate_graph(nodes: list[dict], edges: list[dict]) -> tuple[list[dict],
     for n in nodes:
         nid = n["id"]
         grp = n.get("group")
-        lbl = n.get("label", "")
+        lbl = n.get("label") or ""
 
         if grp in ("Person", "Company", "Location"):
-            canon_name = label_to_canonical.get(lbl, lbl)
+            canon_name = label_to_canonical.get(lbl) or lbl or ""
             key = (grp, canon_name.lower())
 
             if key not in canonical_nodes_by_group:
@@ -126,9 +129,9 @@ def consolidate_graph(nodes: list[dict], edges: list[dict]) -> tuple[list[dict],
             seen_node_ids.add(canon_id)
             rep_node = node_by_id[canon_id]
             grp = rep_node.get("group")
-            lbl = rep_node.get("label", "")
+            lbl = rep_node.get("label") or ""
             if grp in ("Person", "Company", "Location") and lbl in label_to_canonical:
-                rep_node["label"] = label_to_canonical[lbl]
+                rep_node["label"] = label_to_canonical[lbl] or lbl or ""
             consolidated_nodes.append(rep_node)
 
     # Re-route edges and consolidate weights
@@ -136,7 +139,7 @@ def consolidate_graph(nodes: list[dict], edges: list[dict]) -> tuple[list[dict],
     for e in edges:
         src = id_to_canonical_id.get(e["from"], e["from"])
         dst = id_to_canonical_id.get(e["to"], e["to"])
-        rel_label = e.get("label", "")
+        rel_label = e.get("label") or ""
 
         # Omit self-loops created by node merging
         if src == dst:
@@ -157,3 +160,4 @@ def consolidate_graph(nodes: list[dict], edges: list[dict]) -> tuple[list[dict],
 
     consolidated_edges = list(consolidated_edges_map.values())
     return consolidated_nodes, consolidated_edges
+

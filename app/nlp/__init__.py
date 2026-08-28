@@ -2,6 +2,11 @@ from app.nlp.model import get_nlp
 from app.nlp.text_processing import normalize_company_name, clean_entity_name
 from app.nlp.classification import classify_topic, analyze_sentiment
 
+def _filter_entity_set(raw_texts, normalizer_fn) -> list[str]:
+    """Normalizes and filters entity name strings, omitting empty or single-character names."""
+    cleaned = {normalizer_fn(t) for t in raw_texts if t}
+    return [name for name in cleaned if len(name) > 1]
+
 def extract_entities(text: str) -> dict:
     """
     Analyzes document text to extract people, companies, and locations,
@@ -12,19 +17,15 @@ def extract_entities(text: str) -> dict:
     # Extract unique raw entities across the entire document
     doc_full = nlp(text)
     
-    raw_companies = list(set([ent.text for ent in doc_full.ents if ent.label_ == "ORG"]))
-    raw_people = list(set([ent.text for ent in doc_full.ents if ent.label_ == "PERSON"]))
-    raw_locations = list(set([ent.text for ent in doc_full.ents if ent.label_ == "GPE"]))
-    
-    # Clean and normalize names
-    companies = list(set([normalize_company_name(name) for name in raw_companies]))
-    people = list(set([clean_entity_name(name) for name in raw_people]))
-    locations = list(set([clean_entity_name(name) for name in raw_locations]))
-    
-    # Filter empty or trivial results
-    companies = [c for c in companies if len(c) > 1]
-    people = [p for p in people if len(p) > 1]
-    locations = [l for l in locations if len(l) > 1]
+    companies = _filter_entity_set(
+        [ent.text for ent in doc_full.ents if ent.label_ == "ORG"], normalize_company_name
+    )
+    people = _filter_entity_set(
+        [ent.text for ent in doc_full.ents if ent.label_ == "PERSON"], clean_entity_name
+    )
+    locations = _filter_entity_set(
+        [ent.text for ent in doc_full.ents if ent.label_ == "GPE"], clean_entity_name
+    )
     
     # Classify topic and analyze sentiment
     category = classify_topic(text)
@@ -37,14 +38,9 @@ def extract_entities(text: str) -> dict:
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     for paragraph in paragraphs:
         p_doc = nlp(paragraph)
-        p_companies = set([normalize_company_name(ent.text) for ent in p_doc.ents if ent.label_ == "ORG"])
-        p_people = set([clean_entity_name(ent.text) for ent in p_doc.ents if ent.label_ == "PERSON"])
-        p_locations = set([clean_entity_name(ent.text) for ent in p_doc.ents if ent.label_ == "GPE"])
-        
-        # Filter matching elements
-        p_companies = {c for c in p_companies if len(c) > 1}
-        p_people = {p for p in p_people if len(p) > 1}
-        p_locations = {l for l in p_locations if len(l) > 1}
+        p_companies = set(_filter_entity_set([ent.text for ent in p_doc.ents if ent.label_ == "ORG"], normalize_company_name))
+        p_people = set(_filter_entity_set([ent.text for ent in p_doc.ents if ent.label_ == "PERSON"], clean_entity_name))
+        p_locations = set(_filter_entity_set([ent.text for ent in p_doc.ents if ent.label_ == "GPE"], clean_entity_name))
         
         # Cross-reference people and companies in this paragraph
         for p in p_people:

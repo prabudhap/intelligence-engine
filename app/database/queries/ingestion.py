@@ -7,6 +7,26 @@ def save_intelligence(repo, org_name: str, title: str, entities: dict, body: str
     with repo.get_session() as session:
         session.execute_write(_cypher_transaction, org_name, title, entities, body, pub_date, url)
 
+def _canonicalize_names(raw_names: list[str]) -> tuple[dict[str, str], list[str]]:
+    """Cleans raw names, builds alias mapping, and returns canonical sorted name list."""
+    cleaned = [n.strip() for n in raw_names if n and isinstance(n, str) and n.strip()]
+    alias_map = build_entity_alias_map(cleaned)
+    canonical_list = sorted(list(set([alias_map.get(n, n) for n in cleaned])))
+    return alias_map, canonical_list
+
+def _deduplicate_relationships(raw_rels: list[dict], k1: str, k2: str, map1: dict, map2: dict) -> list[dict]:
+    """Deduplicates and sorts relationship pairs after applying canonical name resolution."""
+    seen = set()
+    result = []
+    for r in raw_rels:
+        v1 = map1.get(r.get(k1, "").strip(), r.get(k1, "").strip()) if r.get(k1) else ""
+        v2 = map2.get(r.get(k2, "").strip(), r.get(k2, "").strip()) if r.get(k2) else ""
+        if v1 and v2 and (v1, v2) not in seen:
+            seen.add((v1, v2))
+            result.append({k1: v1, k2: v2})
+    result.sort(key=lambda x: (x[k1], x[k2]))
+    return result
+
 def _cypher_transaction(tx: Any, org_name: str, title: str, entities: dict, body: str, pub_date: str | None = None, url: str | None = None):
     temp_info = get_temporal_info(pub_date)
     current_time = temp_info["timestamp"]
@@ -14,40 +34,17 @@ def _cypher_transaction(tx: Any, org_name: str, title: str, entities: dict, body
     sentiment = entities.get("sentiment", "Neutral")
     
     # Entity Resolution & Alias Consolidation
-    raw_companies = [c.strip() for c in entities.get("companies", []) if c and c.strip()]
-    raw_people = [p.strip() for p in entities.get("people", []) if p and p.strip()]
-    raw_locations = [l.strip() for l in entities.get("locations", []) if l and l.strip()]
-
-    people_map = build_entity_alias_map(raw_people)
-    company_map = build_entity_alias_map(raw_companies)
-    location_map = build_entity_alias_map(raw_locations)
-
-    companies = sorted(list(set([company_map.get(c, c) for c in raw_companies])))
-    people = sorted(list(set([people_map.get(p, p) for p in raw_people])))
-    locations = sorted(list(set([location_map.get(l, l) for l in raw_locations])))
+    company_map, companies = _canonicalize_names(entities.get("companies", []))
+    people_map, people = _canonicalize_names(entities.get("people", []))
+    location_map, locations = _canonicalize_names(entities.get("locations", []))
 
     # Deduplicate relationship pairs with resolved canonical names
-    raw_rels = entities.get("relationships", [])
-    unique_rels_set = set()
-    relationships = []
-    for r in raw_rels:
-        p_name = people_map.get(r.get("person", "").strip(), r.get("person", "").strip())
-        c_name = company_map.get(r.get("company", "").strip(), r.get("company", "").strip())
-        if p_name and c_name and (p_name, c_name) not in unique_rels_set:
-            unique_rels_set.add((p_name, c_name))
-            relationships.append({"person": p_name, "company": c_name})
-    relationships.sort(key=lambda x: (x["person"], x["company"]))
-
-    raw_loc_rels = entities.get("location_relationships", [])
-    unique_loc_set = set()
-    location_relationships = []
-    for r in raw_loc_rels:
-        p_name = people_map.get(r.get("person", "").strip(), r.get("person", "").strip())
-        l_name = location_map.get(r.get("location", "").strip(), r.get("location", "").strip())
-        if p_name and l_name and (p_name, l_name) not in unique_loc_set:
-            unique_loc_set.add((p_name, l_name))
-            location_relationships.append({"person": p_name, "location": l_name})
-    location_relationships.sort(key=lambda x: (x["person"], x["location"]))
+    relationships = _deduplicate_relationships(
+        entities.get("relationships", []), "person", "company", people_map, company_map
+    )
+    location_relationships = _deduplicate_relationships(
+        entities.get("location_relationships", []), "person", "location", people_map, location_map
+    )
 
     # Pairwise co-occurrences for entities mentioned in this article
     all_ents = []

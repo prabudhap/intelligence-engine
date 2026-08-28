@@ -81,6 +81,8 @@ def vacuum_database(
     except Exception as e:
         handle_db_exception(e)
 
+from app.services import fetch_stock_quote
+
 @router.get("/space-stats")
 def get_space_stats(
     org: str = Query("Default", description="Organization workspace name")
@@ -90,4 +92,40 @@ def get_space_stats(
         return stats
     except Exception as e:
         handle_db_exception(e)
+
+@router.get("/company-financials")
+def get_company_financials(
+    company: str = Query(..., description="Company or Organization entity name"),
+    org: str = Query("Default", description="Organization workspace name")
+):
+    try:
+        quote = fetch_stock_quote(company)
+        
+        articles = db.get_company_related_articles(company, org)
+        
+        pos_count = sum(1 for a in articles if a.get("sentiment") == "Positive")
+        neg_count = sum(1 for a in articles if a.get("sentiment") == "Negative")
+        neu_count = sum(1 for a in articles if a.get("sentiment") not in ["Positive", "Negative"])
+        total_arts = len(articles)
+        
+        pos_pct = round((pos_count / total_arts * 100), 1) if total_arts > 0 else 0.0
+        neg_pct = round((neg_count / total_arts * 100), 1) if total_arts > 0 else 0.0
+        neu_pct = round((neu_count / total_arts * 100), 1) if total_arts > 0 else 0.0
+        
+        return {
+            "stock_quote": quote,
+            "sentiment_summary": {
+                "total_articles": total_arts,
+                "positive": pos_count,
+                "negative": neg_count,
+                "neutral": neu_count,
+                "positive_pct": pos_pct,
+                "negative_pct": neg_pct,
+                "neutral_pct": neu_pct
+            },
+            "articles": articles
+        }
+    except Exception as e:
+        handle_db_exception(e)
+
 

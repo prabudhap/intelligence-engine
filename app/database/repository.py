@@ -37,3 +37,7 @@ class DatabaseRepository:
     def get_space_stats(self, org_name: str = "Default") -> dict:
         return queries.get_database_space_stats(self, org_name)
 
+    def get_company_related_articles(self, company_name: str, org_name: str = "Default") -> list:
+        return queries.get_company_related_articles(self, company_name, org_name)
+
+

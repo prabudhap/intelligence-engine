@@ -60,3 +60,14 @@ class TestEntityResolution:
         # Edges between merged person and company should combine weights
         assert len(cons_edges) == 1
         assert cons_edges[0]["weight"] == 3
+
+    def test_consolidate_graph_with_none_label(self):
+        nodes = [
+            {"id": "n1", "label": None, "group": "Person"},
+            {"id": "n2", "label": "Elon Musk", "group": "Person"},
+        ]
+        edges = []
+
+        cons_nodes, cons_edges = consolidate_graph(nodes, edges)
+        assert len(cons_nodes) == 2
+

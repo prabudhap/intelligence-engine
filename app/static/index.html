@@ -261,6 +261,46 @@
                             <div class="legend-item" data-entity="days"><span class="legend-dot legend-day"></span> Day</div>
                             <div class="legend-item" data-entity="periods"><span class="legend-dot legend-period"></span> Period (6h)</div>
                         </div>
+
+                        <!-- Company Stock & News Sentiment Overlay Menu -->
+                        <div id="companyStockMenu" class="company-stock-menu hidden">
+                            <div class="stock-menu-header">
+                                <div class="stock-title-wrapper">
+                                    <h4 id="stockMenuCompanyName">Company Name</h4>
+                                    <span id="stockMenuTicker" class="stock-ticker-badge">TICKER</span>
+                                </div>
+                                <button id="closeStockMenuBtn" class="close-stock-menu-btn"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            <div class="stock-menu-body">
+                                <div class="stock-price-section">
+                                    <div class="price-val-wrapper">
+                                        <span id="stockMenuPrice" class="stock-price-usd">$0.00</span>
+                                        <span id="stockMenuChange" class="stock-change-pill">--</span>
+                                    </div>
+                                    <div class="price-subtext" id="stockMenuSubtext">USD • Real-Time Quote</div>
+                                </div>
+                                <div class="sentiment-section">
+                                    <div class="section-subtitle"><i class="fa-solid fa-chart-pie"></i> News Sentiment Distribution</div>
+                                    <div class="sentiment-bar-wrapper">
+                                        <div id="sentBarPos" class="sent-bar-segment sent-pos" style="width: 0%;" title="Positive"></div>
+                                        <div id="sentBarNeu" class="sent-bar-segment sent-neu" style="width: 100%;" title="Neutral"></div>
+                                        <div id="sentBarNeg" class="sent-bar-segment sent-neg" style="width: 0%;" title="Negative"></div>
+                                    </div>
+                                    <div class="sentiment-legend-stats">
+                                        <span class="sent-stat pos"><i class="fa-solid fa-circle"></i> <span id="stockMenuPosPct">0%</span> Positive</span>
+                                        <span class="sent-stat neu"><i class="fa-solid fa-circle"></i> <span id="stockMenuNeuPct">100%</span> Neutral</span>
+                                        <span class="sent-stat neg"><i class="fa-solid fa-circle"></i> <span id="stockMenuNegPct">0%</span> Negative</span>
+                                    </div>
+                                </div>
+                                <div class="articles-section">
+                                    <div class="section-subtitle"><i class="fa-solid fa-newspaper"></i> Related News Articles</div>
+                                    <div id="stockMenuArticlesList" class="stock-articles-list">
+                                        <div class="empty-news-text">No direct news articles found.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Graph Container -->
                         <div id="networkGraphContainer" class="graph-canvas">
                             <div class="graph-placeholder">

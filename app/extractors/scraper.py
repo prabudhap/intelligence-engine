@@ -57,6 +57,61 @@ def resolve_google_news_url(url: str, user_agent: str) -> str:
         logger.error(f"❌ Failed to resolve Google News URL redirect: {e}")
         return url
 
+def _extract_article_title(soup: BeautifulSoup, fallback_url: str) -> str:
+    """Extracts article title using meta tags and heading tags, falling back to URL."""
+    title_tags = [
+        ("h1", {}),
+        ("title", {}),
+        ("meta", {"property": "og:title"}),
+        ("meta", {"name": "twitter:title"})
+    ]
+    for tag_name, attrs in title_tags:
+        tag = soup.find(tag_name, attrs)
+        if tag:
+            title = tag.get("content", "").strip() if tag_name == "meta" else tag.get_text().strip()
+            if title:
+                return title
+    return fallback_url
+
+def _extract_article_body(soup: BeautifulSoup, max_length: int = 15000) -> str:
+    """Extracts paragraph content from main article containers, falling back to meta descriptions."""
+    for element in soup(["script", "style", "nav", "footer", "header", "aside", "form", "iframe", "noscript"]):
+        element.decompose()
+        
+    container_candidates = [
+        ("article", {}),
+        ("main", {}),
+        ("div", {"class": "post-content"}),
+        ("div", {"class": "entry-content"}),
+        ("div", {"class": "article-body"}),
+        ("div", {"id": "article-body"}),
+        ("div", {"class": "story-body"}),
+    ]
+    
+    content_container = None
+    for tag_name, attrs in container_candidates:
+        container = soup.find(tag_name, attrs)
+        if container and len(container.find_all("p")) >= 2:
+            content_container = container
+            break
+                
+    search_root = content_container if content_container else soup
+    text_blocks = [p.get_text().strip() for p in search_root.find_all("p") if len(p.get_text().strip()) > 30]
+    body = "\n\n".join(text_blocks)
+    
+    if not body:
+        meta_desc = soup.find("meta", {"name": "description"}) or soup.find("meta", {"property": "og:description"})
+        if meta_desc:
+            body = meta_desc.get("content", "").strip()
+            
+    if not body:
+        body = soup.get_text(separator="\n\n").strip()
+        
+    if len(body) > max_length:
+        body = body[:max_length] + "\n\n[Content Truncated...]"
+        
+    return body
+
 def scrape_article(url: str) -> dict:
     """
     Fetches an article URL, parses the HTML, and returns the title and body text.
@@ -76,7 +131,6 @@ def scrape_article(url: str) -> dict:
     logger.info(f"🕸️ Attempting to scrape URL: {url}")
     
     try:
-        # Use httpx with redirect follow and a 10s timeout
         with httpx.Client(headers=headers, follow_redirects=True, timeout=10.0) as client:
             response = client.get(url)
             response.raise_for_status()
@@ -87,80 +141,8 @@ def scrape_article(url: str) -> dict:
         
     try:
         soup = BeautifulSoup(html_content, "html.parser")
-        
-        # 1. Try to find the article title
-        title = ""
-        title_tags = [
-            ("h1", {}),
-            ("title", {}),
-            ("meta", {"property": "og:title"}),
-            ("meta", {"name": "twitter:title"})
-        ]
-        
-        for tag_name, attrs in title_tags:
-            tag = soup.find(tag_name, attrs)
-            if tag:
-                if tag_name == "meta":
-                    title = tag.get("content", "").strip()
-                else:
-                    title = tag.get_text().strip()
-                if title:
-                    break
-                    
-        if not title:
-            title = url  # Fallback to URL
-            
-        # 2. Extract article body paragraphs
-        # Exclude elements that typically contain navigation, ads, headers, footers, scripts, styles, iframes
-        for element in soup(["script", "style", "nav", "footer", "header", "aside", "form", "iframe", "noscript"]):
-            element.decompose()
-            
-        # Try to locate common article container wrappers
-        content_container = None
-        container_candidates = [
-            ("article", {}),
-            ("main", {}),
-            ("div", {"class": "post-content"}),
-            ("div", {"class": "entry-content"}),
-            ("div", {"class": "article-body"}),
-            ("div", {"id": "article-body"}),
-            ("div", {"class": "story-body"}),
-        ]
-        
-        for tag_name, attrs in container_candidates:
-            container = soup.find(tag_name, attrs)
-            if container:
-                # Ensure the container has actual paragraph elements
-                if len(container.find_all("p")) >= 2:
-                    content_container = container
-                    break
-                    
-        search_root = content_container if content_container else soup
-        
-        # Fetch all paragraphs inside the search root
-        paragraphs = search_root.find_all("p")
-        text_blocks = []
-        for p in paragraphs:
-            text = p.get_text().strip()
-            # Filter out very short texts which are usually cookie notices or button labels
-            if len(text) > 30:
-                text_blocks.append(text)
-                
-        body = "\n\n".join(text_blocks)
-        
-        # Fallback to meta-description if body is empty or too short
-        if not body:
-            meta_desc = soup.find("meta", {"name": "description"}) or soup.find("meta", {"property": "og:description"})
-            if meta_desc:
-                body = meta_desc.get("content", "").strip()
-                
-        if not body:
-            # Fallback: grab all text if no paragraphs were found
-            body = soup.get_text(separator="\n\n").strip()
-            
-        # Limit text length to prevent context issues (e.g. max 15000 chars)
-        if len(body) > 15000:
-            body = body[:15000] + "\n\n[Content Truncated...]"
+        title = _extract_article_title(soup, url)
+        body = _extract_article_body(soup)
             
         logger.info(f"🎉 Successfully scraped title: '{title}' ({len(body)} characters)")
         return {

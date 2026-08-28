@@ -189,6 +189,13 @@ document.addEventListener("DOMContentLoaded", () => {
             hideGraphInfoBox();
         });
     }
+
+    const closeStockMenuBtn = document.getElementById("closeStockMenuBtn");
+    if (closeStockMenuBtn) {
+        closeStockMenuBtn.addEventListener("click", () => {
+            hideCompanyStockMenu();
+        });
+    }
 });
 
 // Load Workspaces list from API
@@ -698,10 +705,22 @@ function renderNetwork(nodesArray, edgesArray) {
             }
         });
 
+        networkInstance.on("hoverNode", (params) => {
+            const nodeId = params.node;
+            const nodeData = nodesDataSet.get(nodeId);
+            if (nodeData && (nodeData.group === "Company" || nodeData.group === "Organization")) {
+                showCompanyStockMenu(nodeData.label);
+            }
+        });
+
         networkInstance.on("selectNode", (params) => {
             const nodeId = params.nodes[0];
             if (nodeId) {
                 applySpotlightFocus(null, nodeId);
+                const nodeData = nodesDataSet.get(nodeId);
+                if (nodeData && (nodeData.group === "Company" || nodeData.group === "Organization")) {
+                    showCompanyStockMenu(nodeData.label);
+                }
             }
         });
 
@@ -709,6 +728,7 @@ function renderNetwork(nodesArray, edgesArray) {
             if (params.nodes.length === 0 && params.edges.length === 0) {
                 resetSpotlightFocus();
                 hideGraphInfoBox();
+                hideCompanyStockMenu();
             }
         });
     } catch (err) {
@@ -1407,6 +1427,118 @@ function hideGraphInfoBox() {
     const infoBox = document.getElementById("graphInfoBox");
     if (infoBox) {
         infoBox.classList.remove("visible");
+    }
+}
+
+let activeCompanyFinancialsCache = {};
+
+async function showCompanyStockMenu(companyName) {
+    const stockMenu = document.getElementById("companyStockMenu");
+    if (!stockMenu || !companyName) return;
+
+    const companyNameEl = document.getElementById("stockMenuCompanyName");
+    const tickerEl = document.getElementById("stockMenuTicker");
+    const priceEl = document.getElementById("stockMenuPrice");
+    const changeEl = document.getElementById("stockMenuChange");
+    const subtextEl = document.getElementById("stockMenuSubtext");
+
+    const posPctEl = document.getElementById("stockMenuPosPct");
+    const neuPctEl = document.getElementById("stockMenuNeuPct");
+    const negPctEl = document.getElementById("stockMenuNegPct");
+
+    const barPos = document.getElementById("sentBarPos");
+    const barNeu = document.getElementById("sentBarNeu");
+    const barNeg = document.getElementById("sentBarNeg");
+
+    const articlesListEl = document.getElementById("stockMenuArticlesList");
+
+    companyNameEl.textContent = companyName;
+    tickerEl.textContent = "...";
+    priceEl.textContent = "Loading...";
+    changeEl.textContent = "--";
+    changeEl.className = "stock-change-pill";
+    subtextEl.textContent = "Fetching Market Quote & News Sentiment...";
+
+    articlesListEl.innerHTML = `<div class="empty-news-text"><i class="fa-solid fa-spinner fa-spin"></i> Fetching news sentiment...</div>`;
+    stockMenu.classList.remove("hidden");
+
+    try {
+        const cacheKey = `${companyName}_${activeWorkspace}`;
+        let data = activeCompanyFinancialsCache[cacheKey];
+        if (!data) {
+            const res = await fetch(`/api/company-financials?company=${encodeURIComponent(companyName)}&org=${encodeURIComponent(activeWorkspace)}`);
+            data = await res.json();
+            activeCompanyFinancialsCache[cacheKey] = data;
+        }
+
+        const quote = data.stock_quote || {};
+        const sent = data.sentiment_summary || {};
+        const articles = data.articles || [];
+
+        if (quote.is_public && quote.current_price !== undefined) {
+            tickerEl.textContent = quote.ticker || "US";
+            priceEl.textContent = quote.formatted_price || `$${quote.current_price}`;
+            changeEl.textContent = quote.formatted_change || "--";
+            changeEl.className = `stock-change-pill ${quote.is_up ? 'up' : 'down'}`;
+            subtextEl.textContent = "USD • Real-Time Market Quote";
+        } else if (quote.ticker) {
+            tickerEl.textContent = quote.ticker;
+            priceEl.textContent = "USD Quote N/A";
+            changeEl.textContent = quote.message || "Unlisted";
+            changeEl.className = "stock-change-pill unlisted";
+            subtextEl.textContent = "USD • Financial Quote Unavailable";
+        } else {
+            tickerEl.textContent = "PRIVATE";
+            priceEl.textContent = "Private Entity";
+            changeEl.textContent = "Unlisted";
+            changeEl.className = "stock-change-pill unlisted";
+            subtextEl.textContent = "Entity not publicly traded on stock exchanges";
+        }
+
+        // Render Sentiment Bar
+        const posP = sent.positive_pct || 0;
+        const neuP = sent.neutral_pct || (sent.total_articles ? 0 : 100);
+        const negP = sent.negative_pct || 0;
+
+        barPos.style.width = `${posP}%`;
+        barNeu.style.width = `${neuP}%`;
+        barNeg.style.width = `${negP}%`;
+
+        posPctEl.textContent = `${posP}%`;
+        neuPctEl.textContent = `${neuP}%`;
+        negPctEl.textContent = `${negP}%`;
+
+        // Render Related News Links
+        if (articles.length === 0) {
+            articlesListEl.innerHTML = `<div class="empty-news-text">No related news articles found in workspace.</div>`;
+        } else {
+            let html = "";
+            articles.forEach(art => {
+                const targetUrl = art.url || "#";
+                const sentimentIcon = art.sentiment === "Positive" ? '<i class="fa-solid fa-face-smile" style="color:#22c55e;"></i>' : (art.sentiment === "Negative" ? '<i class="fa-solid fa-face-frown" style="color:#ef4444;"></i>' : '<i class="fa-solid fa-face-meh" style="color:#64748b;"></i>');
+                html += `
+                    <div class="stock-article-item">
+                        <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="stock-article-title" title="${art.title}">
+                            ${sentimentIcon} ${art.title}
+                        </a>
+                        ${art.url ? `<a href="${art.url}" target="_blank" rel="noopener noreferrer" class="stock-article-link-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : ''}
+                    </div>
+                `;
+            });
+            articlesListEl.innerHTML = html;
+        }
+
+    } catch (err) {
+        console.error("Failed to load company financials:", err);
+        priceEl.textContent = "Error";
+        subtextEl.textContent = "Failed to load financial & news sentiment metrics.";
+    }
+}
+
+function hideCompanyStockMenu() {
+    const stockMenu = document.getElementById("companyStockMenu");
+    if (stockMenu) {
+        stockMenu.classList.add("hidden");
     }
 }
 

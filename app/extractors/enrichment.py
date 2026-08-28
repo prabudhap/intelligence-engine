@@ -1,8 +1,8 @@
-import xml.etree.ElementTree as ET
 import httpx
 import urllib.parse
 
 from app.core import logger
+from app.extractors.rss_utils import parse_rss_items
 from app.extractors.scraper import scrape_article
 from app.nlp import extract_entities
 from app.database import Database
@@ -22,26 +22,7 @@ def search_news_for_entity(entity_name: str) -> list:
     try:
         resp = httpx.get(url, headers=headers, follow_redirects=True, timeout=10.0)
         resp.raise_for_status()
-        root = ET.fromstring(resp.content)
-        
-        articles = []
-        for item in root.findall(".//item")[:2]:
-            title_el = item.find("title")
-            title = title_el.text if title_el is not None else "Untitled"
-            
-            link_el = item.find("link")
-            link = link_el.text if link_el is not None else ""
-            
-            pub_date_el = item.find("pubDate")
-            pub_date = pub_date_el.text if pub_date_el is not None else None
-            
-            if title and link:
-                articles.append({
-                    "title": title,
-                    "link": link,
-                    "pub_date": pub_date
-                })
-        return articles
+        return parse_rss_items(resp.content, limit=2)
     except Exception as e:
         logger.error(f"⚠️ Google News Search RSS failed for entity '{entity_name}': {e}")
         return []

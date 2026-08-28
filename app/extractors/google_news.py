@@ -1,7 +1,7 @@
-import xml.etree.ElementTree as ET
 import httpx
 
 from app.core import logger
+from app.extractors.rss_utils import parse_rss_items
 from app.extractors.scraper import scrape_article
 from app.nlp import extract_entities
 from app.database import Database
@@ -16,25 +16,7 @@ def parse_google_news_feed() -> list:
     try:
         resp = httpx.get(url, headers=headers, follow_redirects=True, timeout=10.0)
         resp.raise_for_status()
-        root = ET.fromstring(resp.content)
-        
-        articles = []
-        for item in root.findall(".//item")[:20]:
-            title_el = item.find("title")
-            title = title_el.text if title_el is not None else "Untitled"
-            
-            link_el = item.find("link")
-            link = link_el.text if link_el is not None else ""
-            
-            pub_date_el = item.find("pubDate")
-            pub_date = pub_date_el.text if pub_date_el is not None else None
-            
-            if title and link:
-                articles.append({
-                    "title": title,
-                    "link": link,
-                    "pub_date": pub_date
-                })
+        articles = parse_rss_items(resp.content, limit=20)
         logger.info(f"🎉 Successfully parsed {len(articles)} articles from RSS feed.")
         return articles
     except Exception as e:
