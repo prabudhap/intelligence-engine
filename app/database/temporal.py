@@ -2,6 +2,8 @@ import email.utils
 import re
 from datetime import datetime
 
+SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?])\s+')
+
 def get_temporal_info(pub_date_str: str | None = None) -> dict:
     dt = None
     if pub_date_str:
@@ -81,7 +83,7 @@ def extract_context_from_text(body: str, name1: str, name2: str) -> dict:
     if not matched_paragraph:
         return {"context": "", "full_context": ""}
         
-    sentences = re.split(r'(?<=[.!?])\s+', matched_paragraph)
+    sentences = SENTENCE_SPLIT_RE.split(matched_paragraph)
     relevant_sentences = []
     
     for s in sentences:

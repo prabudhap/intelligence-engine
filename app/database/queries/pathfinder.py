@@ -12,6 +12,13 @@ def _resolve_node_info(node) -> dict:
 
 def get_shortest_path(repo, source_name: str, target_name: str, org_name: str = "Default") -> dict:
     """Calculates shortest path between two entities and extracts contextual narrative evidence."""
+    if not source_name or not target_name:
+        return {"nodes": [], "edges": []}
+        
+    source_name = source_name.strip()[:200]
+    target_name = target_name.strip()[:200]
+    org_name = (org_name or "Default").strip()[:100]
+
     if source_name == target_name:
         def _tx_single(tx):
             result = tx.run("""

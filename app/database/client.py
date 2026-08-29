@@ -4,18 +4,45 @@ from neo4j import GraphDatabase
 from app.core import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, logger
 from app.database.repository import DatabaseRepository
 
+import re
+
+ALLOWED_LABELS = {"Organization", "Article", "Person", "Company", "Location", "Year", "Month", "Week", "Day", "TimePeriod"}
+ALLOWED_PROPERTIES = {"name", "title", "id", "created_at", "url"}
+
+def _validate_cypher_identifier(name: str, allowed_set: set[str] | None = None) -> str:
+    """Validates that Cypher schema identifiers are strictly alphanumeric with underscores."""
+    if not name or not re.match(r'^[A-Za-z0-9_]+$', name):
+        raise ValueError(f"Invalid Cypher schema identifier: '{name}'")
+    if allowed_set is not None and name not in allowed_set:
+        raise ValueError(f"Unauthorized Cypher schema identifier: '{name}'")
+    return name
+
 class Database(DatabaseRepository):
     def __init__(self):
         super().__init__(driver=None)
         self.connect()
 
-    def connect(self):
+    def connect(self, max_attempts: int = 3, delay: float = 1.0):
         if self.driver is None:
-            try:
-                self.driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-            except Exception as e:
-                logger.error(f"Failed to create Neo4j driver connection: {e}")
-                self.driver = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    self.driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+                    # Verify connectivity
+                    self.driver.verify_connectivity()
+                    break
+                except Exception as e:
+                    logger.warning(f"Neo4j connection attempt {attempt}/{max_attempts} failed: {e}")
+                    if self.driver:
+                        try:
+                            self.driver.close()
+                        except Exception:
+                            pass
+                        self.driver = None
+                    if attempt < max_attempts:
+                        import time
+                        time.sleep(delay)
+            if self.driver is None:
+                logger.error(f"Failed to create Neo4j driver connection after {max_attempts} attempts.")
 
     def get_session(self):
         if self.driver is None:
@@ -66,9 +93,13 @@ class Database(DatabaseRepository):
         try:
             with self.get_session() as session:
                 for c_name, label, prop in constraints:
-                    p_query = f"CREATE CONSTRAINT {c_name} IF NOT EXISTS FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE"
-                    f_query = f"CREATE CONSTRAINT {c_name} IF NOT EXISTS ON (n:{label}) ASSERT n.{prop} IS UNIQUE"
-                    self._execute_ddl(session, p_query, f_query, c_name)
+                    safe_c_name = _validate_cypher_identifier(c_name)
+                    safe_label = _validate_cypher_identifier(label, ALLOWED_LABELS)
+                    safe_prop = _validate_cypher_identifier(prop, ALLOWED_PROPERTIES)
+
+                    p_query = f"CREATE CONSTRAINT {safe_c_name} IF NOT EXISTS FOR (n:{safe_label}) REQUIRE n.{safe_prop} IS UNIQUE"
+                    f_query = f"CREATE CONSTRAINT {safe_c_name} IF NOT EXISTS ON (n:{safe_label}) ASSERT n.{safe_prop} IS UNIQUE"
+                    self._execute_ddl(session, p_query, f_query, safe_c_name)
                     
                 # Indexes
                 self._execute_ddl(

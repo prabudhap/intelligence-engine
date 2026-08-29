@@ -5,9 +5,10 @@ from app.nlp.classification import classify_topic, analyze_sentiment
 from app.nlp import extract_entities
 from app.database.queries.graph import get_graph_data
 from app.database.queries.pathfinder import get_shortest_path
-from app.services.stock_service import resolve_ticker_symbol, fetch_stock_quote
+from app.services.stock_service import resolve_ticker_symbol, fetch_stock_quote, clear_quote_cache, prune_expired_cache, QUOTE_CACHE
 
 class TestHTMLScraperFunctionality:
+
     def test_scrape_article_html_parsing(self):
         sample_html = """
         <html>
@@ -171,6 +172,7 @@ class TestStockServiceFunctionality:
 
     @patch("httpx.Client.get")
     def test_fetch_stock_quote_mocked_price(self, mock_get):
+        clear_quote_cache()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -194,4 +196,15 @@ class TestStockServiceFunctionality:
         assert quote["currency"] == "USD"
         assert quote["is_up"] is True
         assert "$220.50" in quote["formatted_price"]
+
+    def test_cache_pruning(self):
+        clear_quote_cache()
+        QUOTE_CACHE["TSLA"] = (100.0, {"ticker": "TSLA"})
+        QUOTE_CACHE["AAPL"] = (200.0, {"ticker": "AAPL"})
+        
+        # Prune with current time = 170.0 (TSLA is >60s old, AAPL is not)
+        prune_expired_cache(now=170.0)
+        assert "TSLA" not in QUOTE_CACHE
+        assert "AAPL" in QUOTE_CACHE
+
 

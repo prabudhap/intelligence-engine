@@ -1,44 +1,45 @@
 import re
 
+CATEGORIES = {
+    "Technology": [
+        'ai', 'artificial intelligence', 'software', 'technology', 'semiconductor', 
+        'chip', 'cloud', 'data', 'robot', 'cyber', 'quantum', 'computer', 'developer',
+        'algorithm', 'app', 'hardware', 'gpu', 'cpu', 'system'
+    ],
+    "Finance": [
+        'finance', 'inflation', 'stock', 'investment', 'economy', 'acquisition', 
+        'merger', 'market', 'trade', 'tax', 'bank', 'earnings', 'revenue', 'funding',
+        'deal', 'valuation', 'capital', 'crypto', 'bitcoin', 'shareholder', 'dollar'
+    ],
+    "Geopolitics": [
+        'geopolitics', 'summit', 'diplomatic', 'government', 'treaty', 'sanction', 
+        'election', 'minister', 'president', 'border', 'policy', 'relations', 'un',
+        'ambassador', 'administration', 'legislation', 'senate', 'parliament'
+    ],
+    "Defense": [
+        'defense', 'military', 'conflict', 'security', 'war', 'cybersecurity', 
+        'intelligence', 'threat', 'pentagon', 'weapon', 'strike', 'navy', 'army', 
+        'air force', 'attack', 'hacker', 'exploit', 'malware', 'combat'
+    ],
+    "Healthcare": [
+        'healthcare', 'medical', 'science', 'health', 'disease', 'vaccine', 'fda', 
+        'biotech', 'clinical', 'pharma', 'energy', 'climate', 'carbon', 'emission',
+        'patient', 'hospital', 'drug', 'treatment', 'medicine', 'biology'
+    ]
+}
+
+CATEGORY_PATTERNS = {
+    cat: [re.compile(r'\b' + re.escape(kw) + r'\b', re.IGNORECASE) for kw in keywords]
+    for cat, keywords in CATEGORIES.items()
+}
+
 def classify_topic(text: str) -> str:
     """
-    Classifies the text into a major category based on case-insensitive keyword occurrences.
+    Classifies the text into a major category using pre-compiled regex keyword patterns.
     """
-    text_lower = text.lower()
-    
-    categories = {
-        "Technology": [
-            'ai', 'artificial intelligence', 'software', 'technology', 'semiconductor', 
-            'chip', 'cloud', 'data', 'robot', 'cyber', 'quantum', 'computer', 'developer',
-            'algorithm', 'app', 'hardware', 'gpu', 'cpu', 'system'
-        ],
-        "Finance": [
-            'finance', 'inflation', 'stock', 'investment', 'economy', 'acquisition', 
-            'merger', 'market', 'trade', 'tax', 'bank', 'earnings', 'revenue', 'funding',
-            'deal', 'valuation', 'capital', 'crypto', 'bitcoin', 'shareholder', 'dollar'
-        ],
-        "Geopolitics": [
-            'geopolitics', 'summit', 'diplomatic', 'government', 'treaty', 'sanction', 
-            'election', 'minister', 'president', 'border', 'policy', 'relations', 'un',
-            'ambassador', 'administration', 'legislation', 'senate', 'parliament'
-        ],
-        "Defense": [
-            'defense', 'military', 'conflict', 'security', 'war', 'cybersecurity', 
-            'intelligence', 'threat', 'pentagon', 'weapon', 'strike', 'navy', 'army', 
-            'air force', 'attack', 'hacker', 'exploit', 'malware', 'combat'
-        ],
-        "Healthcare": [
-            'healthcare', 'medical', 'science', 'health', 'disease', 'vaccine', 'fda', 
-            'biotech', 'clinical', 'pharma', 'energy', 'climate', 'carbon', 'emission',
-            'patient', 'hospital', 'drug', 'treatment', 'medicine', 'biology'
-        ]
-    }
-    
     scores = {}
-    for cat, keywords in categories.items():
-        score = 0
-        for keyword in keywords:
-            score += len(re.findall(r'\b' + re.escape(keyword) + r'\b', text_lower))
+    for cat, patterns in CATEGORY_PATTERNS.items():
+        score = sum(len(p.findall(text)) for p in patterns)
         scores[cat] = score
         
     best_category = "General"
@@ -65,7 +66,8 @@ def analyze_sentiment(text: str) -> str:
         'innovative', 'profit', 'profitable', 'optimistic', 'boost', 'upgrade', 
         'breakthrough', 'leadership', 'expand', 'expanded', 'partnership', 'alliance', 
         'solve', 'solution', 'happy', 'pleased', 'excellent', 'achieve', 'achievement',
-        'surpass', 'beat', 'reward', 'advantage'
+        'surpass', 'beat', 'reward', 'advantage', 'dividend', 'outperform', 'rebound', 
+        'soared', 'soar', 'thrive'
     }
     
     negative_words = {
@@ -75,7 +77,8 @@ def analyze_sentiment(text: str) -> str:
         'sued', 'suing', 'investigate', 'investigation', 'fine', 'fined', 'crisis', 
         'layoff', 'laid off', 'cut', 'delay', 'delayed', 'conflict', 'sanction', 
         'breach', 'vulnerability', 'deficit', 'disaster', 'prosecute', 'charge', 'accuse',
-        'damage', 'hurt', 'harm'
+        'damage', 'hurt', 'harm', 'bankruptcy', 'insolvency', 'default', 'surrender', 
+        'collapse', 'catastrophic'
     }
     
     words = WORD_TOKEN_RE.findall(text_lower)

@@ -31,16 +31,20 @@ def extract_entities(text: str) -> dict:
     category = classify_topic(text)
     sentiment = analyze_sentiment(text)
     
-    # Track relationships using paragraph-level proximity (paragraphs separated by \n\n)
+    # Track relationships using paragraph-level proximity in a single pass (without re-parsing)
     relationships = set()
     location_relationships = set()
     
+    # Pre-extract filtered document entity maps
+    doc_orgs = [ent for ent in doc_full.ents if ent.label_ == "ORG"]
+    doc_persons = [ent for ent in doc_full.ents if ent.label_ == "PERSON"]
+    doc_gpes = [ent for ent in doc_full.ents if ent.label_ == "GPE"]
+
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     for paragraph in paragraphs:
-        p_doc = nlp(paragraph)
-        p_companies = set(_filter_entity_set([ent.text for ent in p_doc.ents if ent.label_ == "ORG"], normalize_company_name))
-        p_people = set(_filter_entity_set([ent.text for ent in p_doc.ents if ent.label_ == "PERSON"], clean_entity_name))
-        p_locations = set(_filter_entity_set([ent.text for ent in p_doc.ents if ent.label_ == "GPE"], clean_entity_name))
+        p_companies = set(_filter_entity_set([ent.text for ent in doc_orgs if ent.text in paragraph], normalize_company_name))
+        p_people = set(_filter_entity_set([ent.text for ent in doc_persons if ent.text in paragraph], clean_entity_name))
+        p_locations = set(_filter_entity_set([ent.text for ent in doc_gpes if ent.text in paragraph], clean_entity_name))
         
         # Cross-reference people and companies in this paragraph
         for p in p_people:

@@ -152,6 +152,9 @@ def _extract_article_body(soup: BeautifulSoup, max_length: int = 15000) -> str:
         ("div", {"class": "post-content"}),
         ("div", {"class": "entry-content"}),
         ("div", {"class": "article-body"}),
+        ("div", {"class": "article-content"}),
+        ("div", {"class": "main-content"}),
+        ("section", {"class": "article-body"}),
         ("div", {"id": "article-body"}),
         ("div", {"class": "story-body"}),
     ]
